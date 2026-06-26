@@ -1,0 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  /* Default Theme (Indigo) */
+  --primary-color: #6366f1;
+  --primary-dark: #4f46e5;
+  --primary-light: #818cf8;
+  --primary-soft: #e0e7ff;
+}
+
+[data-theme="indigo"] {
+  --primary-color: #6366f1;
+  --primary-dark: #4f46e5;
+  --primary-light: #818cf8;
+  --primary-soft: #e0e7ff;
+}
+
+[data-theme="emerald"] {
+  --primary-color: #10b981;
+  --primary-dark: #059669;
+  --primary-light: #34d399;
+  --primary-soft: #d1fae5;
+}
+
+[data-theme="rose"] {
+  --primary-color: #f43f5e;
+  --primary-dark: #e11d48;
+  --primary-light: #fb7185;
+  --primary-soft: #ffe4e6;
+}
+
+[data-theme="sky"] {
+  --primary-color: #0ea5e9;
+  --primary-dark: #0284c7;
+  --primary-light: #38bdf8;
+  --primary-soft: #e0f2fe;
+}
+
+.theme-bg { background-color: var(--primary-color) !important; }
+.theme-bg-soft { background-color: var(--primary-soft) !important; }
+.theme-text { color: var(--primary-color) !important; }
+.theme-border { border-color: var(--primary-color) !important; }
+.theme-gradient {
+  background: linear-gradient(160deg, var(--primary-dark) 0%, var(--primary-color) 60%, var(--primary-light) 100%) !important;
+}
+
+@keyframes vivoGlow {
+  0%, 100% {
+    box-shadow: 0 0 4px 1px rgba(255, 255, 255, 0.4), 0 0 10px 2px rgba(34, 197, 94, 0.3);
+    border-color: rgba(255, 255, 255, 0.6);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 14px 3px rgba(255, 255, 255, 0.85), 0 0 20px 5px rgba(34, 197, 94, 0.65);
+    border-color: rgba(255, 255, 255, 1);
+    transform: scale(1.05);
+  }
+}
+
+.vivo-glow {
+  animation: vivoGlow 2.5s infinite ease-in-out;
+  border-width: 2px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.vivo-glow:hover {
+  animation-duration: 1.2s;
+  box-shadow: 0 0 18px 4px rgba(255, 255, 255, 0.9), 0 0 26px 7px rgba(34, 197, 94, 0.85);
+  transform: scale(1.1);
+}
+
+

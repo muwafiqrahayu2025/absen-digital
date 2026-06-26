@@ -1,0 +1,1 @@
+{"name":"Absensi Guru QR","description":"Sistem Absensi Online berbasis GPS dan Cloud Computing ASN Pemerintah Daerah (PEMDA).","requestFramePermissions":["camera","geolocation"],"majorCapabilities":["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]}

@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UI/UX Color Templates — Panduan Warna Aplikasi Modern</title>
+  <meta name="description" content="Koleksi 10 template warna UI/UX populer dan efektif untuk berbagai kategori aplikasi modern — dari Fintech, SaaS, hingga E-Commerce dan Edukasi." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0a0f;
+      --bg2: #111118;
+      --bg3: #1a1a24;
+      --surface: #16161f;
+      --border: rgba(255,255,255,0.07);
+      --text: #f0f0f8;
+      --text-muted: #8888aa;
+      --accent: #6c63ff;
+      --radius: 20px;
+      --shadow: 0 8px 40px rgba(0,0,0,0.45);
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 10%, rgba(108,99,255,0.12) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(255,101,132,0.08) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .container { max-width: 1300px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+
+    /* HEADER */
+    header { padding: 72px 0 56px; text-align: center; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(108,99,255,0.15); border: 1px solid rgba(108,99,255,0.3);
+      color: #a9a3ff; font-size: 13px; font-weight: 600; letter-spacing: 0.08em;
+      padding: 6px 16px; border-radius: 100px; margin-bottom: 28px; text-transform: uppercase;
+    }
+    .badge::before { content: '✦'; }
+    h1 {
+      font-family: 'Outfit', sans-serif; font-size: clamp(2.4rem, 5vw, 4rem); font-weight: 800;
+      line-height: 1.15; letter-spacing: -0.03em;
+      background: linear-gradient(135deg, #f0f0f8 30%, #a9a3ff 70%, #ff6584 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      margin-bottom: 20px;
+    }
+    header p { font-size: 17px; color: var(--text-muted); max-width: 600px; margin: 0 auto 48px; line-height: 1.7; }
+
+    /* STATS */
+    .stats-bar {
+      display: flex; justify-content: center; gap: 48px; flex-wrap: wrap;
+      padding: 20px 32px; background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border); border-radius: 100px; margin-bottom: 64px;
+    }
+    .stat { text-align: center; }
+    .stat-num { font-family: 'Outfit', sans-serif; font-size: 28px; font-weight: 800; color: var(--accent); }
+    .stat-label { font-size: 12px; color: var(--text-muted); font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; }
+
+    /* FILTER */
+    .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 48px; }
+    .filter-btn {
+      padding: 9px 22px; border-radius: 100px; border: 1px solid var(--border);
+      background: transparent; color: var(--text-muted); font-family: 'Inter', sans-serif;
+      font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.25s ease;
+    }
+    .filter-btn:hover { border-color: rgba(108,99,255,0.4); color: #a9a3ff; background: rgba(108,99,255,0.08); }
+    .filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 4px 20px rgba(108,99,255,0.4); }
+
+    /* SECTION LABEL */
+    .section-label { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+    .section-label h2 { font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); white-space: nowrap; }
+    .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* GRID */
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 24px; margin-bottom: 80px; }
+
+    /* CARD */
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: hidden; transition: transform 0.3s cubic-bezier(.23,1,.32,1), box-shadow 0.3s, border-color 0.3s;
+      cursor: pointer; animation: fadeUp 0.5s ease both;
+    }
+    .card:hover { transform: translateY(-6px); box-shadow: var(--shadow); border-color: rgba(255,255,255,0.14); }
+    @keyframes fadeUp { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
+
+    /* PREVIEW */
+    .card-preview { height: 180px; position: relative; overflow: hidden; }
+    .preview-bg { width:100%; height:100%; display:flex; flex-direction:column; padding:20px; gap:12px; }
+    .preview-topbar { display:flex; align-items:center; gap:8px; }
+    .preview-dots { display:flex; gap:5px; }
+    .dot { width:8px; height:8px; border-radius:50%; opacity:0.7; }
+    .preview-title-bar { flex:1; height:8px; border-radius:4px; opacity:0.35; }
+    .preview-cards { display:flex; gap:8px; flex:1; }
+    .preview-card-mini { flex:1; border-radius:10px; display:flex; flex-direction:column; padding:10px; gap:6px; opacity:0.9; }
+    .preview-card-mini .line { height:6px; border-radius:3px; opacity:0.5; }
+    .preview-card-mini .line.wide { width:70%; }
+    .preview-card-mini .line.narrow { width:45%; }
+    .preview-btn { height:28px; border-radius:6px; margin-top:auto; font-size:10px; display:flex; align-items:center; justify-content:center; font-weight:700; letter-spacing:0.04em; opacity:0.95; }
+
+    /* CARD BODY */
+    .card-body { padding: 22px 24px 24px; }
+    .card-number { font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px; }
+    .card-name { font-family:'Outfit',sans-serif; font-size:20px; font-weight:700; color:var(--text); margin-bottom:4px; }
+    .card-use { font-size:13px; color:var(--text-muted); margin-bottom:16px; }
+    .card-desc { font-size:13.5px; color:var(--text-muted); line-height:1.65; margin-bottom:20px; }
+
+    /* SWATCHES */
+    .swatches { display:flex; gap:10px; flex-wrap:wrap; }
+    .swatch { display:flex; flex-direction:column; gap:6px; align-items:center; cursor:pointer; }
+    .swatch-color { width:44px; height:44px; border-radius:10px; border:2px solid rgba(255,255,255,0.08); transition:transform 0.2s,box-shadow 0.2s; }
+    .swatch:hover .swatch-color { transform:scale(1.1); box-shadow:0 4px 16px rgba(0,0,0,0.4); }
+    .swatch-hex { font-size:10px; font-weight:600; color:var(--text-muted); letter-spacing:0.05em; font-family:'Outfit',monospace; }
+    .swatch-name { font-size:9px; color:var(--text-muted); opacity:0.7; text-align:center; max-width:48px; }
+
+    /* TOAST */
+    .copy-toast {
+      position:fixed; bottom:32px; left:50%; transform:translateX(-50%) translateY(80px);
+      background:rgba(108,99,255,0.92); backdrop-filter:blur(16px); color:#fff;
+      padding:12px 24px; border-radius:100px; font-size:14px; font-weight:600;
+      z-index:9999; transition:transform 0.4s cubic-bezier(.23,1,.32,1),opacity 0.4s;
+      opacity:0; pointer-events:none;
+    }
+    .copy-toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
+
+    /* MODAL */
+    .modal-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(12px);
+      z-index:1000; display:flex; align-items:center; justify-content:center; padding:24px;
+      opacity:0; pointer-events:none; transition:opacity 0.3s;
+    }
+    .modal-overlay.open { opacity:1; pointer-events:all; }
+    .modal {
+      background:var(--bg3); border:1px solid var(--border); border-radius:28px;
+      width:100%; max-width:900px; max-height:90vh; overflow-y:auto;
+      transform:scale(0.93) translateY(24px); transition:transform 0.35s cubic-bezier(.23,1,.32,1);
+      scrollbar-width:thin; scrollbar-color:rgba(108,99,255,0.3) transparent;
+    }
+    .modal-overlay.open .modal { transform:scale(1) translateY(0); }
+    .modal-header { padding:28px 32px 0; display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+    .modal-close {
+      background:rgba(255,255,255,0.08); border:none; color:var(--text-muted);
+      width:36px; height:36px; border-radius:50%; font-size:18px; cursor:pointer;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0;
+      transition:background 0.2s,color 0.2s;
+    }
+    .modal-close:hover { background:rgba(255,255,255,0.15); color:#fff; }
+    .modal-body { padding:24px 32px 32px; }
+
+    /* MOCKUP */
+    .app-mockup { border-radius:20px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.5); margin-bottom:28px; }
+    .mockup-nav { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; }
+    .mockup-logo { font-family:'Outfit',sans-serif; font-size:18px; font-weight:800; }
+    .mockup-nav-links { display:flex; gap:24px; font-size:13px; font-weight:500; }
+    .mockup-content { padding:32px 24px; display:grid; grid-template-columns:2fr 1fr; gap:20px; }
+    .mockup-hero-text h3 { font-family:'Outfit',sans-serif; font-size:26px; font-weight:800; margin-bottom:10px; line-height:1.25; }
+    .mockup-hero-text p { font-size:13px; opacity:0.7; line-height:1.6; margin-bottom:18px; }
+    .mockup-btn { display:inline-block; padding:10px 24px; border-radius:8px; font-size:13px; font-weight:700; cursor:default; }
+    .mockup-side { display:flex; flex-direction:column; gap:10px; }
+    .mockup-widget { border-radius:12px; padding:14px 16px; }
+    .mockup-widget-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; opacity:0.6; margin-bottom:6px; }
+    .mockup-widget-val { font-family:'Outfit',sans-serif; font-size:24px; font-weight:800; }
+    .mockup-footer { display:flex; gap:10px; padding:0 24px 24px; }
+    .mockup-chip { padding:6px 14px; border-radius:100px; font-size:11px; font-weight:600; opacity:0.85; }
+
+    /* COLOR DETAIL */
+    .color-detail-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:20px; }
+    .color-detail-card { border-radius:16px; overflow:hidden; border:1px solid var(--border); }
+    .color-detail-swatch { height:80px; }
+    .color-detail-info { padding:12px; background:rgba(255,255,255,0.04); }
+    .color-detail-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); margin-bottom:4px; }
+    .color-detail-hex { font-family:'Outfit',monospace; font-size:15px; font-weight:700; color:var(--text); cursor:pointer; transition:color 0.2s; }
+    .color-detail-hex:hover { color:#a9a3ff; }
+    .copy-all-btn {
+      width:100%; padding:14px; background:linear-gradient(135deg,var(--accent),#9c6bff);
+      color:#fff; border:none; border-radius:12px; font-family:'Inter',sans-serif;
+      font-size:14px; font-weight:700; cursor:pointer; letter-spacing:0.02em;
+      transition:opacity 0.2s,transform 0.2s;
+    }
+    .copy-all-btn:hover { opacity:0.9; transform:translateY(-1px); }
+
+    /* FOOTER */
+    footer { text-align:center; padding:48px 0; color:var(--text-muted); font-size:13px; border-top:1px solid var(--border); }
+
+    @media (max-width:640px) {
+      .grid { grid-template-columns:1fr; }
+      .stats-bar { gap:24px; }
+      .mockup-content { grid-template-columns:1fr; }
+      .mockup-side { display:none; }
+      .color-detail-grid { grid-template-columns:1fr 1fr; }
+      .modal-body { padding:16px 20px 24px; }
+      .modal-header { padding:20px 20px 0; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="badge">UI/UX Design System</div>
+    <h1>Color Template<br/>Populer &amp; Efektif</h1>
+    <p>Koleksi 10 palet warna terkurasi untuk berbagai kategori aplikasi modern — dari perbankan hingga e-commerce, dari wellness hingga edukasi.</p>
+    <div class="stats-bar">
+      <div class="stat"><div class="stat-num">10</div><div class="stat-label">Templates</div></div>
+      <div class="stat"><div class="stat-num">5</div><div class="stat-label">Kategori</div></div>
+      <div class="stat"><div class="stat-num">30</div><div class="stat-label">Warna Unik</div></div>
+      <div class="stat"><div class="stat-num">&#8734;</div><div class="stat-label">Kemungkinan</div></div>
+    </div>
+  </header>
+
+  <div class="filter-bar" role="group" aria-label="Filter kategori">
+    <button class="filter-btn active" onclick="filterCards('all')" id="filter-all">Semua Template</button>
+    <button class="filter-btn" onclick="filterCards('profesional')" id="filter-profesional">&#128188; Profesional</button>
+    <button class="filter-btn" onclick="filterCards('kreatif')" id="filter-kreatif">&#127912; Kreatif</button>
+    <button class="filter-btn" onclick="filterCards('kesehatan')" id="filter-kesehatan">&#127807; Kesehatan</button>
+    <button class="filter-btn" onclick="filterCards('ecommerce')" id="filter-ecommerce">&#128717; E-Commerce</button>
+    <button class="filter-btn" onclick="filterCards('edukasi')" id="filter-edukasi">&#128218; Edukasi</button>
+  </div>
+
+  <!-- PROFESIONAL -->
+  <div class="section-label" data-cat="profesional"><h2>&#128188; Profesional &amp; Finansial</h2></div>
+  <div class="grid" id="grid-profesional">
+    <!-- 1 -->
+    <div class="card" data-cat="profesional" onclick="openModal(1)">
+      <div class="card-preview"><div class="preview-bg" style="background:#1A237E;">
+        <div class="preview-topbar"><div class="preview-dots"><div class="dot" style="background:#FFD600;"></div><div class="dot" style="background:#E3F2FD;"></div><div class="dot" style="background:#E3F2FD;"></div></div><div class="preview-title-bar" style="background:#E3F2FD;"></div><div class="preview-title-bar" style="background:#FFD600;max-width:60px;"></div></div>
+        <div class="preview-cards"><div class="preview-card-mini" style="background:rgba(227,242,253,0.12);"><div class="line wide" style="background:#E3F2FD;"></div><div class="line narrow" style="background:#E3F2FD;"></div><div class="preview-btn" style="background:#FFD600;color:#1A237E;">BAYAR</div></div><div class="preview-card-mini" style="background:rgba(255,214,0,0.15);"><div class="line wide" style="background:#FFD600;"></div><div class="line narrow" style="background:#FFD600;"></div><div class="preview-btn" style="background:#E3F2FD;color:#1A237E;">DETAIL</div></div></div>
+      </div></div>
+      <div class="card-body"><div class="card-number">No. 01</div><div class="card-name">Deep Trust</div><div class="card-use">Perbankan / Fintech</div><div class="card-desc">Biru tua memberikan kesan aman dan terpercaya, sementara aksen emas memberikan sentuhan premium yang elegan.</div>
+        <div class="swatches">
+          <div class="swatch" onclick="copySwatch(event,'#1A237E')"><div class="swatch-color" style="background:#1A237E;"></div><div class="swatch-hex">#1A237E</div><div class="swatch-name">Navy Blue</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#E3F2FD')"><div class="swatch-color" style="background:#E3F2FD;border-color:rgba(255,255,255,0.2);"></div><div class="swatch-hex">#E3F2FD</div><div class="swatch-name">Light Blue</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#FFD600')"><div class="swatch-color" style="background:#FFD600;"></div><div class="swatch-hex">#FFD600</div><div class="swatch-name">Accent Gold</div></div>
+        </div>
+      </div>
+    </div>
+    <!-- 2 -->
+    <div class="card" data-cat="profesional" onclick="openModal(2)" style="animation-delay:0.05s">
+      <div class="card-preview"><div class="preview-bg" style="background:#263238;">
+        <div class="preview-topbar"><div class="preview-dots"><div class="dot" style="background:#2196F3;"></div><div class="dot" style="background:#F5F5F5;"></div><div class="dot" style="background:#F5F5F5;"></div></div><div class="preview-title-bar" style="background:#F5F5F5;"></div><div class="preview-title-bar" style="background:#2196F3;max-width:60px;"></div></div>
+        <div class="preview-cards"><div class="preview-card-mini" style="background:rgba(245,245,245,0.08);"><div class="line wide" style="background:#F5F5F5;"></div><div class="line narrow" style="background:#F5F5F5;"></div><div class="preview-btn" style="background:#2196F3;color:#fff;">LOGIN</div></div><div class="preview-card-mini" style="background:rgba(33,150,243,0.15);"><div class="line wide" style="background:#2196F3;"></div><div class="line narrow" style="background:#2196F3;"></div><div class="preview-btn" style="background:#F5F5F5;color:#263238;">MULAI</div></div></div>
+      </div></div>
+      <div class="card-body"><div class="card-number">No. 02</div><div class="card-name">Clean Corporate</div><div class="card-use">SaaS / Bisnis</div><div class="card-desc">Kombinasi yang terlihat sangat bersih, modern, dan tidak melelahkan mata untuk penggunaan durasi lama.</div>
+        <div class="swatches">
+          <div class="swatch" onclick="copySwatch(event,'#263238')"><div class="swatch-color" style="background:#263238;"></div><div class="swatch-hex">#263238</div><div class="swatch-name">Slate Grey</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#2196F3')"><div class="swatch-color" style="background:#2196F3;"></div><div class="swatch-hex">#2196F3</div><div class="swatch-name">Bright Blue</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#F5F5F5')"><div class="swatch-color" style="background:#F5F5F5;border-color:rgba(255,255,255,0.25);"></div><div class="swatch-hex">#F5F5F5</div><div class="swatch-name">Soft Grey</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KREATIF -->
+  <div class="section-label" data-cat="kreatif"><h2>&#127912; Kreatif &amp; Media Sosial</h2></div>
+  <div class="grid" id="grid-kreatif">
+    <!-- 3 -->
+    <div class="card" data-cat="kreatif" onclick="openModal(3)">
+      <div class="card-preview"><div class="preview-bg" style="background:linear-gradient(135deg,#6200EE,#FF0266);">
+        <div class="preview-topbar"><div class="preview-dots"><div class="dot" style="background:#fff;"></div><div class="dot" style="background:#fff;"></div><div class="dot" style="background:#FF0266;"></div></div><div class="preview-title-bar" style="background:rgba(255,255,255,0.5);"></div></div>
+        <div class="preview-cards"><div class="preview-card-mini" style="background:rgba(255,255,255,0.15);"><div class="line wide" style="background:#fff;"></div><div class="line narrow" style="background:#fff;"></div><div class="preview-btn" style="background:#FF0266;color:#fff;">FOLLOW</div></div><div class="preview-card-mini" style="background:rgba(255,2,102,0.3);"><div class="line wide" style="background:#fff;"></div><div class="line narrow" style="background:#FF0266;"></div><div class="preview-btn" style="background:#6200EE;color:#fff;">LIKE</div></div></div>
+      </div></div>
+      <div class="card-body"><div class="card-number">No. 03</div><div class="card-name">Vibrant Energy</div><div class="card-use">Hiburan / Media Sosial</div><div class="card-desc">Warna cerah kontras tinggi — sangat efektif menarik perhatian generasi muda dan mendorong interaksi spontan.</div>
+        <div class="swatches">
+          <div class="swatch" onclick="copySwatch(event,'#6200EE')"><div class="swatch-color" style="background:#6200EE;"></div><div class="swatch-hex">#6200EE</div><div class="swatch-name">Electric Purple</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#FF0266')"><div class="swatch-color" style="background:#FF0266;"></div><div class="swatch-hex">#FF0266</div><div class="swatch-name">Hot Pink</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#FFFFFF')"><div class="swatch-color" style="background:#FFFFFF;border-color:rgba(255,255,255,0.3);"></div><div class="swatch-hex">#FFFFFF</div><div class="swatch-name">White</div></div>
+        </div>
+      </div>
+    </div>
+    <!-- 4 -->
+    <div class="card" data-cat="kreatif" onclick="openModal(4)" style="animation-delay:0.05s">
+      <div class="card-preview"><div class="preview-bg" style="background:#FFF9C4;">
+        <div class="preview-topbar"><div class="preview-dots"><div class="dot" style="background:#B2DFDB;"></div><div class="dot" style="background:#FFCCBC;"></div><div class="dot" style="background:#B2DFDB;"></div></div><div class="preview-title-bar" style="background:#FFCCBC;"></div></div>
+        <div class="preview-cards"><div class="preview-card-mini" style="background:#B2DFDB;"><div class="line wide" style="background:#FFCCBC;"></div><div class="line narrow" style="background:#FFCCBC;"></div><div class="preview-btn" style="background:#FFCCBC;color:#555;">EXPLORE</div></div><div class="preview-card-mini" style="background:#FFCCBC;"><div class="line wide" style="background:#B2DFDB;"></div><div class="line narrow" style="background:#B2DFDB;"></div><div class="preview-btn" style="background:#B2DFDB;color:#555;">SAVE</div></div></div>
+      </div></div>
+      <div class="card-body"><div class="card-number">No. 04</div><div class="card-name">Pastel Delight</div><div class="card-use">Gaya Hidup / Lifestyle</div><div class="card-desc">Memberikan kesan ramah, santai, dan estetik. Cocok untuk aplikasi journaling, fashion, atau konten gaya hidup.</div>
+        <div class="swatches">
+          <div class="swatch" onclick="copySwatch(event,'#B2DFDB')"><div class="swatch-color" style="background:#B2DFDB;"></div><div class="swatch-hex">#B2DFDB</div><div class="swatch-name">Soft Mint</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#FFCCBC')"><div class="swatch-color" style="background:#FFCCBC;"></div><div class="swatch-hex">#FFCCBC</div><div class="swatch-name">Peach</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#FFF9C4')"><div class="swatch-color" style="background:#FFF9C4;"></div><div class="swatch-hex">#FFF9C4</div><div class="swatch-name">Cream</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KESEHATAN -->
+  <div class="section-label" data-cat="kesehatan"><h2>&#127807; Kesehatan &amp; Alam</h2></div>
+  <div class="grid" id="grid-kesehatan">
+    <!-- 5 -->
+    <div class="card" data-cat="kesehatan" onclick="openModal(5)">
+      <div class="card-preview"><div class="preview-bg" style="background:#2D5A27;">
+        <div class="preview-topbar"><div class="preview-dots"><div class="dot" style="background:#8BC34A;"></div><div class="dot" style="background:#fff;"></div><div class="dot" style="background:#8BC34A;"></div></div><div class="preview-title-bar" style="background:rgba(255,255,255,0.4);"></div></div>
+        <div class="preview-cards"><div class="preview-card-mini" style="background:rgba(139,195,74,0.2);"><div class="line wide" style="background:#8BC34A;"></div><div class="line narrow" style="background:#fff;"></div><div class="preview-btn" style="background:#8BC34A;color:#fff;">MULAI</div></div><div class="preview-card-mini" style="background:rgba(255,255,255,0.1);"><div class="line wide" style="background:#fff;"></div><div class="line narrow" style="background:#8BC34A;"></div><div class="preview-btn" style="background:#fff;color:#2D5A27;">ECO</div></div></div>
+      </div></div>
+      <div class="card-body"><div class="card-number">No. 05</div><div class="card-name">Eco-Friendly</div><div class="card-use">Kesehatan / Lingkungan</div><div class="card-desc">Hijau tua sebagai warna utama memberikan kesan tenang, terpercaya, dan selaras dengan alam.</div>
+        <div class="swatches">
+          <div class="swatch" onclick="copySwatch(event,'#2D5A27')"><div class="swatch-color" style="background:#2D5A27;"></div><div class="swatch-hex">#2D5A27</div><div class="swatch-name">Forest Green</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#8BC34A')"><div class="swatch-color" style="background:#8BC34A;"></div><div class="swatch-hex">#8BC34A</div><div class="swatch-name">Lime Green</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#FFFFFF')"><div class="swatch-color" style="background:#FFFFFF;border-color:rgba(255,255,255,0.3);"></div><div class="swatch-hex">#FFFFFF</div><div class="swatch-name">White</div></div>
+        </div>
+      </div>
+    </div>
+    <!-- 6 -->
+    <div class="card" data-cat="kesehatan" onclick="openModal(6)" style="animation-delay:0.05s">
+      <div class="card-preview"><div class="preview-bg" style="background:#ECEFF1;">
+        <div class="preview-topbar"><div class="preview-dots"><div class="dot" style="background:#E1BEE7;"></div><div class="dot" style="background:#B3E5FC;"></div><div class="dot" style="background:#E1BEE7;"></div></div><div class="preview-title-bar" style="background:#B3E5FC;"></div></div>
+        <div class="preview-cards"><div class="preview-card-mini" style="background:#E1BEE7;"><div class="line wide" style="background:#B3E5FC;"></div><div class="line narrow" style="background:#B3E5FC;"></div><div class="preview-btn" style="background:#B3E5FC;color:#555;">RELAX</div></div><div class="preview-card-mini" style="background:#B3E5FC;"><div class="line wide" style="background:#E1BEE7;"></div><div class="line narrow" style="background:#E1BEE7;"></div><div class="preview-btn" style="background:#E1BEE7;color:#555;">MEDITATE</div></div></div>
+      </div></div>
+      <div class="card-body"><div class="card-number">No. 06</div><div class="card-name">Serenity</div><div class="card-use">Meditasi / Wellness</div><div class="card-desc">Warna-warna dingin yang halus membantu pengguna merasa rileks dan damai saat membuka aplikasi.</div>
+        <div class="swatches">
+          <div class="swatch" onclick="copySwatch(event,'#E1BEE7')"><div class="swatch-color" style="background:#E1BEE7;"></div><div class="swatch-hex">#E1BEE7</div><div class="swatch-name">Lavender</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#B3E5FC')"><div class="swatch-color" style="background:#B3E5FC;"></div><div class="swatch-hex">#B3E5FC</div><div class="swatch-name">Sky Blue</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#ECEFF1')"><div class="swatch-color" style="background:#ECEFF1;"></div><div class="swatch-hex">#ECEFF1</div><div class="swatch-name">Pale Grey</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- E-COMMERCE -->
+  <div class="section-label" data-cat="ecommerce"><h2>&#128717; E-Commerce &amp; Retail</h2></div>
+  <div class="grid" id="grid-ecommerce">
+    <!-- 7 -->
+    <div class="card" data-cat="ecommerce" onclick="openModal(7)">
+      <div class="card-preview"><div class="preview-bg" style="background:#121212;">
+        <div class="preview-topbar"><div class="preview-dots"><div class="dot" style="background:#D32F2F;"></div><div class="dot" style="background:#FAFAFA;"></div><div class="dot" style="background:#D32F2F;"></div></div><div class="preview-title-bar" style="background:rgba(250,250,250,0.3);"></div></div>
+        <div class="preview-cards"><div class="preview-card-mini" style="background:rgba(211,47,47,0.2);"><div class="line wide" style="background:#FAFAFA;"></div><div class="line narrow" style="background:#D32F2F;"></div><div class="preview-btn" style="background:#D32F2F;color:#fff;">BELI</div></div><div class="preview-card-mini" style="background:rgba(250,250,250,0.06);"><div class="line wide" style="background:#FAFAFA;"></div><div class="line narrow" style="background:#FAFAFA;"></div><div class="preview-btn" style="background:#FAFAFA;color:#121212;">KERANJANG</div></div></div>
+      </div></div>
+      <div class="card-body"><div class="card-number">No. 07</div><div class="card-name">Bold Shopper</div><div class="card-use">Retail / Fashion</div><div class="card-desc">Merah adalah warna paling efektif mendorong keputusan pembelian cepat (impulse buying) pada platform retail.</div>
+        <div class="swatches">
+          <div class="swatch" onclick="copySwatch(event,'#121212')"><div class="swatch-color" style="background:#121212;"></div><div class="swatch-hex">#121212</div><div class="swatch-name">Matte Black</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#D32F2F')"><div class="swatch-color" style="background:#D32F2F;"></div><div class="swatch-hex">#D32F2F</div><div class="swatch-name">Flame Red</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#FAFAFA')"><div class="swatch-color" style="background:#FAFAFA;border-color:rgba(255,255,255,0.3);"></div><div class="swatch-hex">#FAFAFA</div><div class="swatch-name">Off-White</div></div>
+        </div>
+      </div>
+    </div>
+    <!-- 8 -->
+    <div class="card" data-cat="ecommerce" onclick="openModal(8)" style="animation-delay:0.05s">
+      <div class="card-preview"><div class="preview-bg" style="background:#333333;">
+        <div class="preview-topbar"><div class="preview-dots"><div class="dot" style="background:#D4AF37;"></div><div class="dot" style="background:#fff;"></div><div class="dot" style="background:#D4AF37;"></div></div><div class="preview-title-bar" style="background:rgba(255,255,255,0.25);"></div></div>
+        <div class="preview-cards"><div class="preview-card-mini" style="background:rgba(212,175,55,0.15);"><div class="line wide" style="background:#D4AF37;"></div><div class="line narrow" style="background:#fff;"></div><div class="preview-btn" style="background:#D4AF37;color:#333;">EKSKLUSIF</div></div><div class="preview-card-mini" style="background:rgba(255,255,255,0.07);"><div class="line wide" style="background:#fff;"></div><div class="line narrow" style="background:#D4AF37;"></div><div class="preview-btn" style="background:#fff;color:#333;">KOLEKSI</div></div></div>
+      </div></div>
+      <div class="card-body"><div class="card-number">No. 08</div><div class="card-name">Golden Luxury</div><div class="card-use">Produk Premium</div><div class="card-desc">Penggunaan emas secara minimalis di atas latar gelap menciptakan kesan eksklusif dan berkelas tinggi.</div>
+        <div class="swatches">
+          <div class="swatch" onclick="copySwatch(event,'#333333')"><div class="swatch-color" style="background:#333333;"></div><div class="swatch-hex">#333333</div><div class="swatch-name">Charcoal</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#D4AF37')"><div class="swatch-color" style="background:#D4AF37;"></div><div class="swatch-hex">#D4AF37</div><div class="swatch-name">Champagne Gold</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#FFFFFF')"><div class="swatch-color" style="background:#FFFFFF;border-color:rgba(255,255,255,0.3);"></div><div class="swatch-hex">#FFFFFF</div><div class="swatch-name">White</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDUKASI -->
+  <div class="section-label" data-cat="edukasi"><h2>&#128218; Edukasi &amp; Produktivitas</h2></div>
+  <div class="grid" id="grid-edukasi">
+    <!-- 9 -->
+    <div class="card" data-cat="edukasi" onclick="openModal(9)">
+      <div class="card-preview"><div class="preview-bg" style="background:#F9F9F9;">
+        <div class="preview-topbar"><div class="preview-dots"><div class="dot" style="background:#3F51B5;"></div><div class="dot" style="background:#FF9800;"></div><div class="dot" style="background:#3F51B5;"></div></div><div class="preview-title-bar" style="background:#3F51B5;opacity:0.4;"></div></div>
+        <div class="preview-cards"><div class="preview-card-mini" style="background:#3F51B5;"><div class="line wide" style="background:#fff;"></div><div class="line narrow" style="background:#fff;"></div><div class="preview-btn" style="background:#FF9800;color:#fff;">MULAI BELAJAR</div></div><div class="preview-card-mini" style="background:rgba(63,81,181,0.1);"><div class="line wide" style="background:#3F51B5;"></div><div class="line narrow" style="background:#FF9800;"></div><div class="preview-btn" style="background:#3F51B5;color:#fff;">LANJUT</div></div></div>
+      </div></div>
+      <div class="card-body"><div class="card-number">No. 09</div><div class="card-name">Focus Mode</div><div class="card-use">E-Learning / Edukasi</div><div class="card-desc">Oranye digunakan sebagai aksen pada CTA "Mulai Belajar" agar tombol terlihat menonjol dan mendorong tindakan.</div>
+        <div class="swatches">
+          <div class="swatch" onclick="copySwatch(event,'#3F51B5')"><div class="swatch-color" style="background:#3F51B5;"></div><div class="swatch-hex">#3F51B5</div><div class="swatch-name">Indigo</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#FF9800')"><div class="swatch-color" style="background:#FF9800;"></div><div class="swatch-hex">#FF9800</div><div class="swatch-name">Bright Orange</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#F9F9F9')"><div class="swatch-color" style="background:#F9F9F9;border-color:rgba(0,0,0,0.1);"></div><div class="swatch-hex">#F9F9F9</div><div class="swatch-name">Light Grey</div></div>
+        </div>
+      </div>
+    </div>
+    <!-- 10 -->
+    <div class="card" data-cat="edukasi" onclick="openModal(10)" style="animation-delay:0.05s">
+      <div class="card-preview"><div class="preview-bg" style="background:#FFFFFF;">
+        <div class="preview-topbar"><div class="preview-dots"><div class="dot" style="background:#64B5F6;"></div><div class="dot" style="background:#424242;"></div><div class="dot" style="background:#64B5F6;"></div></div><div class="preview-title-bar" style="background:#424242;opacity:0.2;"></div></div>
+        <div class="preview-cards"><div class="preview-card-mini" style="background:#F0F4FF;"><div class="line wide" style="background:#424242;"></div><div class="line narrow" style="background:#64B5F6;"></div><div class="preview-btn" style="background:#64B5F6;color:#fff;">TAMBAH CATATAN</div></div><div class="preview-card-mini" style="background:rgba(100,181,246,0.1);"><div class="line wide" style="background:#424242;"></div><div class="line narrow" style="background:#424242;"></div><div class="preview-btn" style="background:#424242;color:#fff;">SELESAI</div></div></div>
+      </div></div>
+      <div class="card-body"><div class="card-number">No. 10</div><div class="card-name">Minimalist Productivity</div><div class="card-use">Note / Task App</div><div class="card-desc">Fokus utama pada konten teks dengan latar belakang putih bersih — desain yang tidak mengganggu konsentrasi.</div>
+        <div class="swatches">
+          <div class="swatch" onclick="copySwatch(event,'#FFFFFF')"><div class="swatch-color" style="background:#FFFFFF;border-color:rgba(0,0,0,0.1);"></div><div class="swatch-hex">#FFFFFF</div><div class="swatch-name">Pure White</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#64B5F6')"><div class="swatch-color" style="background:#64B5F6;"></div><div class="swatch-hex">#64B5F6</div><div class="swatch-name">Soft Blue</div></div>
+          <div class="swatch" onclick="copySwatch(event,'#424242')"><div class="swatch-color" style="background:#424242;"></div><div class="swatch-hex">#424242</div><div class="swatch-name">Dark Grey</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<footer><div class="container"><p>&#10022; UI/UX Color Templates &middot; 10 Palet Terkurasi &middot; Klik swatch warna untuk menyalin kode hex</p></div></footer>
+
+<!-- TOAST -->
+<div class="copy-toast" id="copyToast">&#10003; Kode warna disalin!</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOnOverlay(event)">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div>
+        <div id="modalNumber" style="font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#8888aa;margin-bottom:6px;"></div>
+        <div id="modalName" style="font-family:'Outfit',sans-serif;font-size:26px;font-weight:800;color:#f0f0f8;"></div>
+        <div id="modalUse" style="font-size:14px;color:#8888aa;margin-top:4px;"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal()" aria-label="Tutup">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div id="modalMockup"></div>
+      <div class="color-detail-grid" id="modalColors"></div>
+      <button class="copy-all-btn" id="copyAllBtn" onclick="copyAll()">&#128203; Salin Semua Kode Warna</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const templates = {
+  1:{name:"Deep Trust",number:"No. 01",use:"Perbankan / Fintech",colors:[{label:"Primary — Navy Blue",hex:"#1A237E"},{label:"Background — Light Blue",hex:"#E3F2FD"},{label:"Accent — Gold",hex:"#FFD600"}],mockup:{bg:"#1A237E",nav:"#0D1657",text:"#E3F2FD",accent:"#FFD600",accent2:"#E3F2FD",btnText:"#1A237E",logoText:"&#127974; TrustBank",navLinks:["Beranda","Transfer","Riwayat","Profil"],title:"Kelola Keuangan<br>Anda dengan Aman",body:"Platform perbankan digital terpercaya dengan keamanan tingkat enterprise.",btn:"Mulai Sekarang",chip1:"&#10004; SSL Terenkripsi",chip2:"&#10004; OTP 2-Factor",chip3:"&#10004; Real-time",w1label:"Saldo",w1val:"Rp 24.5Jt",w2label:"Transaksi",w2val:"128"}},
+  2:{name:"Clean Corporate",number:"No. 02",use:"SaaS / Bisnis",colors:[{label:"Primary — Slate Grey",hex:"#263238"},{label:"Accent — Bright Blue",hex:"#2196F3"},{label:"Background — Soft Grey",hex:"#F5F5F5"}],mockup:{bg:"#F5F5F5",nav:"#263238",text:"#263238",accent:"#2196F3",accent2:"#F5F5F5",btnText:"#fff",logoText:"&#9670; CorpSaaS",navLinks:["Dashboard","Analytics","Team","Settings"],title:"Dashboard Bisnis<br>Serbaguna",body:"Pantau performa perusahaan Anda secara real-time dengan analitik canggih.",btn:"Coba Gratis 14 Hari",chip1:"&#128202; Analytics",chip2:"&#128101; Kolaborasi",chip3:"&#128274; Aman",w1label:"Pengguna Aktif",w1val:"4,821",w2label:"Konversi",w2val:"92%"}},
+  3:{name:"Vibrant Energy",number:"No. 03",use:"Hiburan / Media Sosial",colors:[{label:"Primary — Electric Purple",hex:"#6200EE"},{label:"Accent — Hot Pink",hex:"#FF0266"},{label:"Background — White",hex:"#FFFFFF"}],mockup:{bg:"linear-gradient(135deg,#6200EE,#FF0266)",nav:"rgba(0,0,0,0.25)",text:"#FFFFFF",accent:"#FF0266",accent2:"#fff",btnText:"#6200EE",logoText:"&#9889; VibeApp",navLinks:["Feed","Explore","Create","Messages"],title:"Ekspresikan Dirimu<br>Tanpa Batas!",body:"Platform kreativitas terdepan untuk generasi muda yang ingin tampil beda.",btn:"Buat Konten Sekarang",chip1:"&#128293; Trending",chip2:"&#127925; Music",chip3:"&#127916; Video",w1label:"Followers",w1val:"1.2M",w2label:"Views",w2val:"98.4K"}},
+  4:{name:"Pastel Delight",number:"No. 04",use:"Gaya Hidup / Lifestyle",colors:[{label:"Primary — Soft Mint",hex:"#B2DFDB"},{label:"Accent — Peach",hex:"#FFCCBC"},{label:"Background — Cream",hex:"#FFF9C4"}],mockup:{bg:"#FFF9C4",nav:"#B2DFDB",text:"#5D4037",accent:"#FFCCBC",accent2:"#B2DFDB",btnText:"#5D4037",logoText:"&#127800; PastelLife",navLinks:["Beranda","Gaya","Beauty","Tips"],title:"Hidup Cantik,<br>Hidup Bahagia",body:"Inspirasi gaya hidup estetik dan tips kecantikan untuk hari yang menyenangkan.",btn:"Eksplorasi Gaya",chip1:"&#127799; Beauty",chip2:"&#9749; Lifestyle",chip3:"&#128247; Aesthetic",w1label:"Artikel",w1val:"284",w2label:"Favorit",w2val:"3.4K"}},
+  5:{name:"Eco-Friendly",number:"No. 05",use:"Kesehatan / Lingkungan",colors:[{label:"Primary — Forest Green",hex:"#2D5A27"},{label:"Accent — Lime Green",hex:"#8BC34A"},{label:"Background — White",hex:"#FFFFFF"}],mockup:{bg:"#2D5A27",nav:"#1E3D1C",text:"#FFFFFF",accent:"#8BC34A",accent2:"#fff",btnText:"#2D5A27",logoText:"&#127807; EcoLife",navLinks:["Beranda","Produk","Artikel","Komunitas"],title:"Jaga Bumi,<br>Jaga Kesehatan",body:"Temukan produk ramah lingkungan dan tips hidup sehat yang berkelanjutan.",btn:"Bergabung Gratis",chip1:"&#127807; Organik",chip2:"&#9851; Eco",chip3:"&#128154; Sehat",w1label:"Pohon Ditanam",w1val:"12,440",w2label:"Komunitas",w2val:"8.2K"}},
+  6:{name:"Serenity",number:"No. 06",use:"Meditasi / Wellness",colors:[{label:"Primary — Lavender",hex:"#E1BEE7"},{label:"Accent — Sky Blue",hex:"#B3E5FC"},{label:"Background — Pale Grey",hex:"#ECEFF1"}],mockup:{bg:"#ECEFF1",nav:"#E1BEE7",text:"#4A4A6A",accent:"#B3E5FC",accent2:"#E1BEE7",btnText:"#4A4A6A",logoText:"&#128553; Serenity",navLinks:["Beranda","Meditasi","Tidur","Nafas"],title:"Temukan Kedamaian<br>Dalam Dirimu",body:"Panduan meditasi dan teknik relaksasi untuk hidup yang lebih tenang dan seimbang.",btn:"Mulai Meditasi",chip1:"&#129470; Meditasi",chip2:"&#128564; Tidur",chip3:"&#127804; Nafas",w1label:"Sesi Selesai",w1val:"47",w2label:"Streak Hari",w2val:"21"}},
+  7:{name:"Bold Shopper",number:"No. 07",use:"Retail / Fashion",colors:[{label:"Primary — Matte Black",hex:"#121212"},{label:"Accent — Flame Red",hex:"#D32F2F"},{label:"Background — Off-White",hex:"#FAFAFA"}],mockup:{bg:"#121212",nav:"#0A0A0A",text:"#FAFAFA",accent:"#D32F2F",accent2:"#FAFAFA",btnText:"#fff",logoText:"&#9889; BoldStore",navLinks:["Pria","Wanita","Sale","Brand"],title:"Style Tanpa<br>Kompromi",body:"Koleksi fashion premium dengan diskon eksklusif hingga 70% — hanya hari ini!",btn:"&#128722; Belanja Sekarang",chip1:"&#128293; HOT SALE",chip2:"&#128666; Gratis Ongkir",chip3:"&#8617; Easy Return",w1label:"Flash Sale",w1val:"70% OFF",w2label:"Item Tersisa",w2val:"12"}},
+  8:{name:"Golden Luxury",number:"No. 08",use:"Produk Premium",colors:[{label:"Primary — Charcoal",hex:"#333333"},{label:"Accent — Champagne Gold",hex:"#D4AF37"},{label:"Background — White",hex:"#FFFFFF"}],mockup:{bg:"#333333",nav:"#222222",text:"#FFFFFF",accent:"#D4AF37",accent2:"#fff",btnText:"#333333",logoText:"&#10022; LUXORA",navLinks:["Koleksi","Eksklusif","About","Contact"],title:"Keagungan<br>yang Abadi",body:"Produk premium handcrafted dengan standar kualitas tertinggi untuk mereka yang menghargai keistimewaan.",btn:"&#10022; Lihat Koleksi",chip1:"Handcrafted",chip2:"Limited Edition",chip3:"Certificate",w1label:"Koleksi Eksklusif",w1val:"47 Item",w2label:"Rating",w2val:"&#9733; 4.98"}},
+  9:{name:"Focus Mode",number:"No. 09",use:"E-Learning / Edukasi",colors:[{label:"Primary — Indigo",hex:"#3F51B5"},{label:"CTA — Bright Orange",hex:"#FF9800"},{label:"Background — Light Grey",hex:"#F9F9F9"}],mockup:{bg:"#F9F9F9",nav:"#3F51B5",text:"#1A1A2E",accent:"#FF9800",accent2:"#fff",btnText:"#fff",logoText:"&#128216; EduFocus",navLinks:["Kursus","Progress","Tutor","Sertifikat"],title:"Belajar Lebih Cerdas<br>Bukan Lebih Keras",body:"Platform e-learning adaptif dengan lebih dari 500 kursus dari instruktur terbaik.",btn:"&#128640; Mulai Belajar Gratis",chip1:"500+ Kursus",chip2:"Sertifikat",chip3:"Live Class",w1label:"Progress Hari Ini",w1val:"78%",w2label:"Kursus Aktif",w2val:"3"}},
+  10:{name:"Minimalist Productivity",number:"No. 10",use:"Note / Task App",colors:[{label:"Background — Pure White",hex:"#FFFFFF"},{label:"Accent — Soft Blue",hex:"#64B5F6"},{label:"Text — Dark Grey",hex:"#424242"}],mockup:{bg:"#FFFFFF",nav:"#F8F9FF",text:"#424242",accent:"#64B5F6",accent2:"#424242",btnText:"#fff",logoText:"&#9675; CleanNote",navLinks:["Semua","Hari Ini","Penting","Arsip"],title:"Pikiran Jernih,<br>Produktivitas Maksimal",body:"Catat ide, kelola tugas, dan tetap fokus dengan antarmuka yang bersih tanpa gangguan.",btn:"+ Tambah Catatan",chip1:"&#128221; Catatan",chip2:"&#10003; Tugas",chip3:"&#128197; Kalender",w1label:"Tugas Selesai",w1val:"24/30",w2label:"Streak",w2val:"14 hari"}}
+};
+
+function buildMockup(t){
+  const m=t.mockup;
+  return `<div class="app-mockup">
+    <div class="mockup-nav" style="background:${m.nav};">
+      <div class="mockup-logo" style="color:${m.accent};">${m.logoText}</div>
+      <div class="mockup-nav-links" style="color:${m.accent2};opacity:0.85;">${m.navLinks.map(l=>`<span>${l}</span>`).join('')}</div>
+    </div>
+    <div class="mockup-content" style="background:${m.bg};">
+      <div class="mockup-hero-text">
+        <h3 style="color:${m.text};">${m.title}</h3>
+        <p style="color:${m.text};">${m.body}</p>
+        <div class="mockup-btn" style="background:${m.accent};color:${m.btnText};">${m.btn}</div>
+      </div>
+      <div class="mockup-side">
+        <div class="mockup-widget" style="background:rgba(128,128,128,0.1);">
+          <div class="mockup-widget-title" style="color:${m.text};">${m.w1label}</div>
+          <div class="mockup-widget-val" style="color:${m.accent};">${m.w1val}</div>
+        </div>
+        <div class="mockup-widget" style="background:rgba(128,128,128,0.1);">
+          <div class="mockup-widget-title" style="color:${m.text};">${m.w2label}</div>
+          <div class="mockup-widget-val" style="color:${m.text};">${m.w2val}</div>
+        </div>
+      </div>
+    </div>
+    <div class="mockup-footer" style="background:${m.bg};">
+      <div class="mockup-chip" style="background:${m.accent};color:${m.btnText};">${m.chip1}</div>
+      <div class="mockup-chip" style="background:rgba(128,128,128,0.12);color:${m.text};">${m.chip2}</div>
+      <div class="mockup-chip" style="background:rgba(128,128,128,0.12);color:${m.text};">${m.chip3}</div>
+    </div>
+  </div>`;
+}
+
+let currentColors=[];
+function openModal(id){
+  const t=templates[id]; if(!t)return;
+  currentColors=t.colors;
+  document.getElementById('modalNumber').textContent=t.number;
+  document.getElementById('modalName').textContent=t.name;
+  document.getElementById('modalUse').textContent=t.use;
+  document.getElementById('modalMockup').innerHTML=buildMockup(t);
+  document.getElementById('modalColors').innerHTML=t.colors.map(c=>`
+    <div class="color-detail-card">
+      <div class="color-detail-swatch" style="background:${c.hex};"></div>
+      <div class="color-detail-info">
+        <div class="color-detail-label">${c.label}</div>
+        <div class="color-detail-hex" onclick="copySwatch(event,'${c.hex}')" title="Klik untuk menyalin">${c.hex}</div>
+      </div>
+    </div>`).join('');
+  document.getElementById('copyAllBtn').textContent='\uD83D\uDCCB Salin Semua Kode Warna';
+  document.getElementById('modalOverlay').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function closeModal(){
+  document.getElementById('modalOverlay').classList.remove('open');
+  document.body.style.overflow='';
+}
+function closeModalOnOverlay(e){ if(e.target===document.getElementById('modalOverlay'))closeModal(); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape')closeModal(); });
+
+function copyAll(){
+  const text=currentColors.map(c=>`${c.label}: ${c.hex}`).join('\n');
+  navigator.clipboard.writeText(text).then(()=>{
+    showToast('\u2713 Semua kode warna disalin!');
+    const btn=document.getElementById('copyAllBtn');
+    btn.textContent='\u2713 Tersalin!';
+    setTimeout(()=>btn.textContent='\uD83D\uDCCB Salin Semua Kode Warna',2000);
+  });
+}
+function copySwatch(e,hex){
+  e.stopPropagation();
+  navigator.clipboard.writeText(hex).then(()=>showToast(`\u2713 ${hex} disalin!`));
+}
+let toastTimer;
+function showToast(msg){
+  const t=document.getElementById('copyToast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2500);
+}
+function filterCards(cat){
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('filter-'+cat).classList.add('active');
+  if(cat==='all'){
+    document.querySelectorAll('.section-label,.grid').forEach(el=>el.style.display='');
+  } else {
+    document.querySelectorAll('.section-label').forEach(el=>el.style.display=el.dataset.cat===cat?'':'none');
+    document.querySelectorAll('.grid').forEach(el=>el.style.display=el.id==='grid-'+cat?'':'none');
+  }
+}
+</script>
+</body>
+</html>

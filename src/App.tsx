@@ -1,0 +1,220 @@
+import React from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
+import { AuthProvider, useAuth } from "./components/AuthContext";
+import { ThemeProvider } from "./components/ThemeContext";
+import { EditModeProvider } from "./components/EditModeContext";
+import { Layout } from "./components/Layout";
+import { Login } from "./pages/Login";
+import { Dashboard } from "./pages/Dashboard";
+import { Profile } from "./pages/Profile";
+import { ManageUsers } from "./pages/admin/ManageUsers";
+import { ManageSchool } from "./pages/admin/ManageSchool";
+import { ManageAcademic } from "./pages/admin/ManageAcademic";
+import { ManageHolidays } from "./pages/admin/ManageHolidays";
+import { ManageAttendance } from "./pages/admin/ManageAttendance";
+import { ManageLeave } from "./pages/admin/ManageLeave";
+import { ManageSchedule } from "./pages/admin/ManageSchedule";
+import { GenerateQR } from "./pages/admin/GenerateQR";
+import { ScanQR } from "./pages/teacher/ScanQR";
+import { PrincipalAttendanceRecaps } from "./pages/principal/PrincipalAttendanceRecaps";
+import { PrintRecap } from "./pages/principal/PrintRecap";
+import { SchoolScanner } from "./pages/admin/SchoolScanner";
+import { DeveloperConsole } from "./pages/admin/DeveloperConsole";
+import { FloatingEditTools } from "./components/FloatingEditTools";
+
+function ProtectedRoute({
+  children,
+  allowedRoles,
+}: {
+  children: React.ReactNode;
+  allowedRoles?: string[];
+}) {
+  const { user } = useAuth();
+  if (!user) {
+    // Preserve search params for direct phone scans
+    const search = window.location.search;
+    if (search) {
+      sessionStorage.setItem("login_redirect_search", search);
+      sessionStorage.setItem("login_redirect_pathname", window.location.pathname);
+    }
+    return <Navigate to="/login" />;
+  }
+  if (allowedRoles && !allowedRoles.includes(user.role))
+    return <Navigate to="/" />;
+  return children;
+}
+
+export default function App() {
+  const [isRooted, setIsRooted] = React.useState(false);
+
+  React.useEffect(() => {
+    // Simulasi deteksi Root/Jailbreak terenkripsi
+    // Di aplikasi production native, integrasikan '@awesome-cordova-plugins/root-check'
+    const checkRoot = async () => {
+      // const isDeviceRooted = await RootCheck.isDeviceRooted();
+      const isDeviceRooted = false; // Ubah ke true untuk mensimulasikan pemblokiran perangkat root
+      if (isDeviceRooted) {
+        setIsRooted(true);
+      }
+    };
+    checkRoot();
+  }, []);
+
+  if (isRooted) {
+    return (
+      <div className="min-h-screen bg-black text-red-500 flex flex-col items-center justify-center p-8 text-center font-sans">
+        <div className="w-20 h-20 bg-red-900/30 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(220,38,38,0.4)]">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <h1 className="text-3xl font-black mb-4 tracking-tight drop-shadow-md">Akses Keamanan Ditolak!</h1>
+        <p className="text-base font-medium mb-2 opacity-90">Perangkat ini terdeteksi telah dimodifikasi (Root/Jailbreak).</p>
+        <p className="text-sm mt-4 text-white/50 max-w-sm">Demi keamanan dan integritas data sekolah, aplikasi tidak dapat dijalankan di lingkungan perangkat yang tidak aman.</p>
+      </div>
+    );
+  }
+
+  return (
+    <ThemeProvider>
+      <EditModeProvider>
+        <AuthProvider>
+          <FloatingEditTools />
+          <Toaster position="top-right" />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route
+                path="/print/recap"
+                element={
+                  <ProtectedRoute allowedRoles={["admin", "kepala_madrasah", "developer"]}>
+                    <PrintRecap />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <Layout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<Dashboard />} />
+                <Route path="profile" element={<Profile />} />
+
+                <Route
+                  path="admin/users"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin", "developer"]}>
+                      <ManageUsers />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="admin/school"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin", "developer"]}>
+                      <ManageSchool />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="admin/academic"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin", "developer"]}>
+                      <ManageAcademic />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="admin/holidays"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin", "developer"]}>
+                      <ManageHolidays />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="admin/recaps"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin", "developer"]}>
+                      <PrincipalAttendanceRecaps />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="admin/attendance"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin", "kepala_madrasah", "developer"]}>
+                      <ManageAttendance />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="admin/leave"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin", "kepala_madrasah", "developer"]}>
+                      <ManageLeave />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="admin/schedule"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin", "kepala_madrasah", "developer"]}>
+                      <ManageSchedule />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="admin/generate-qr"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin", "developer"]}>
+                      <GenerateQR />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="admin/school-scanner"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin", "kepala_madrasah", "developer"]}>
+                      <SchoolScanner />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="admin/developer"
+                  element={
+                    <ProtectedRoute allowedRoles={["developer"]}>
+                      <DeveloperConsole />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="teacher/scan"
+                  element={
+                    <ProtectedRoute allowedRoles={["guru", "staf_sekolah"]}>
+                      <ScanQR />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="principal/recaps"
+                  element={
+                    <ProtectedRoute allowedRoles={["kepala_madrasah"]}>
+                      <PrincipalAttendanceRecaps />
+                    </ProtectedRoute>
+                  }
+                />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </EditModeProvider>
+    </ThemeProvider>
+  );
+}
