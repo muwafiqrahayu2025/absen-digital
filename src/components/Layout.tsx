@@ -615,11 +615,11 @@ export function Layout() {
       )}
 
       {/* ── MAIN CONTENT ───────────────────────────────────── */}
-      <main className={cn("flex-1 flex flex-col overflow-hidden print:overflow-visible print:block print:bg-white bg-[#f5f3ff] min-w-0 relative", isTeacherOrStaff ? "pb-16" : "")}>
+      <main className={cn("flex-1 flex flex-col overflow-hidden print:overflow-visible print:block print:bg-white bg-slate-50 min-w-0 relative", isTeacherOrStaff ? "pb-16" : "")}>
         {isTeacherOrStaff && <WindowControls />}
         {/* TOPBAR */}
         <header className={cn(
-          "print:hidden h-14 bg-white items-center justify-between px-3 sm:px-5 shrink-0 relative z-10 border-b border-gray-100 shadow-sm gap-2",
+          "print:hidden h-14 bg-white items-center justify-between px-3 sm:px-5 shrink-0 relative z-10 border-b border-slate-200 shadow-sm gap-2",
           isTeacherOrStaff ? "hidden md:flex" : "flex"
         )}>
           {/* Kiri: hamburger + badge role */}

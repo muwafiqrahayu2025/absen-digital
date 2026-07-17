@@ -1,18 +1,30 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Camera, RefreshCw, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Camera, RefreshCw, CheckCircle, AlertTriangle, MapPin, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { verifyFaceQuality } from '../lib/faceVerification';
 
 interface BiometricSelfieProps {
   onCaptureSuccess: (photoDataUrl: string) => void;
   onCancel: () => void;
+  onBackToQR?: () => void;
   userName?: string;
+  mode?: "check_in" | "check_out";
+  schoolName?: string;
+  maxRadius?: number;
+  currentDistance?: number;
+  isLocating?: boolean;
 }
 
 export const BiometricSelfie: React.FC<BiometricSelfieProps> = ({
   onCaptureSuccess,
   onCancel,
+  onBackToQR,
   userName = 'Pegawai',
+  mode = "check_in",
+  schoolName = "Instansi / Sekolah / Kampus",
+  maxRadius = 120,
+  currentDistance = 0,
+  isLocating = false,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -109,70 +121,108 @@ export const BiometricSelfie: React.FC<BiometricSelfieProps> = ({
     setIsVerifying(false);
   };
 
+  const isSafeGeofence = currentDistance <= maxRadius;
+  const buttonGradient = mode === "check_in" 
+    ? "from-blue-600 to-teal-500 hover:from-blue-500 hover:to-teal-400" 
+    : "from-rose-600 to-fuchsia-600 hover:from-rose-500 hover:to-fuchsia-500";
+
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden relative">
-      <div className="p-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-        <h3 className="font-bold text-gray-800">Verifikasi Wajah</h3>
-        <button onClick={onCancel} className="text-gray-500 hover:text-red-500 text-sm font-medium">
+    <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative animate-fade-in font-sans text-slate-800">
+      <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+        <h3 className="font-bold text-slate-800">Verifikasi Wajah (GPS/Selfie)</h3>
+        <button onClick={onCancel} className="text-slate-500 hover:text-rose-500 text-xs font-medium transition">
           Batal
         </button>
       </div>
       
-      <div className="relative bg-black aspect-video flex items-center justify-center">
-        <video 
-          ref={videoRef} 
-          autoPlay 
-          playsInline 
-          muted 
-          className="max-h-full max-w-full object-cover transform -scale-x-100" 
-        />
-        <canvas ref={canvasRef} className="hidden" />
-        
-        {/* Face Guide Overlay */}
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          <div className="w-48 h-64 border-2 border-dashed border-white/50 rounded-full"></div>
+      <div className="p-4 sm:p-6 space-y-5">
+        <div className="text-center">
+          <p className="text-xs font-medium text-slate-500">Langkah 2: Ambil Selfie untuk Menyelesaikan Absensi</p>
         </div>
-        
-        {cameras.length > 1 && (
-          <button 
-            onClick={switchCamera}
-            className="absolute top-4 right-4 bg-black/50 p-2 rounded-full text-white hover:bg-black/70 transition"
-          >
-            <RefreshCw className="w-5 h-5" />
-          </button>
-        )}
-      </div>
 
-      <div className="p-6 text-center space-y-4">
-        <p className="text-sm text-gray-600">
-          Hai <strong>{userName}</strong>, posisikan wajah Anda di dalam area lingkaran. 
-          Pastikan pencahayaan cukup dan wajah terlihat jelas.
-        </p>
-
-        {issues.length > 0 && (
-          <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm flex items-start text-left">
-            <AlertTriangle className="w-5 h-5 mr-2 shrink-0 mt-0.5" />
-            <ul className="list-disc pl-4 space-y-1">
-              {issues.map((issue, idx) => (
-                <li key={idx}>{issue}</li>
-              ))}
-            </ul>
+        {/* SATELLITE GEOFENCE HUD BAR */}
+        <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+          <div className="flex items-center gap-2">
+            <MapPin size={15} className={isLocating ? "text-amber-500 animate-spin" : isSafeGeofence ? "text-emerald-500" : "text-rose-500"} />
+            <span className="text-slate-600">
+              {isLocating ? "Mencari satelit..." : `Jarak ke ${schoolName}: `}
+              {!isLocating && <strong className={isSafeGeofence ? "text-emerald-600" : "text-rose-500 font-bold"}>{Math.round(currentDistance)} Meter</strong>}
+            </span>
           </div>
-        )}
+          <div className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${isSafeGeofence ? "bg-emerald-50 text-emerald-600 border border-emerald-200" : "bg-rose-50 text-rose-600 border border-rose-200 animate-pulse"}`}>
+            {isSafeGeofence ? <ShieldCheck size={12} /> : <AlertTriangle size={12} />}
+            {isSafeGeofence ? `GEOFENCE AMAN (≤ ${maxRadius}m)` : `DI LUAR RADIUS (> ${maxRadius}m)`}
+          </div>
+        </div>
 
-        <button
-          onClick={captureAndVerify}
-          disabled={isVerifying || !stream}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50"
-        >
-          {isVerifying ? (
-            <RefreshCw className="w-5 h-5 animate-spin" />
-          ) : (
-            <Camera className="w-5 h-5" />
+        <div className="relative bg-slate-100 rounded-2xl overflow-hidden aspect-video flex items-center justify-center border border-slate-200 shadow-inner">
+          <video 
+            ref={videoRef} 
+            autoPlay 
+            playsInline 
+            muted 
+            className="max-h-full max-w-full object-cover transform -scale-x-100" 
+          />
+          <canvas ref={canvasRef} className="hidden" />
+          
+          {/* Face Guide Overlay */}
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+            <div className="w-48 h-64 border-2 border-dashed border-white/70 rounded-[4rem] shadow-[0_0_15px_rgba(255,255,255,0.2)]"></div>
+          </div>
+          
+          {cameras.length > 1 && (
+            <button 
+              onClick={switchCamera}
+              className="absolute top-4 right-4 bg-white/60 p-2.5 rounded-xl border border-white/50 text-slate-800 hover:bg-white/90 transition backdrop-blur"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
           )}
-          {isVerifying ? 'Memverifikasi...' : 'Ambil Foto Selfie'}
-        </button>
+        </div>
+
+        <div className="text-center space-y-4 pt-2">
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            Hai <strong className="text-slate-800">{userName}</strong>, posisikan wajah Anda di dalam area oval. 
+            Pastikan pencahayaan cukup dan wajah terlihat jelas.
+          </p>
+
+          {issues.length > 0 && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-600 p-3 rounded-xl text-[11px] flex items-start text-left">
+              <AlertTriangle className="w-5 h-5 mr-2 shrink-0 mt-0.5 text-rose-500" />
+              <ul className="list-disc pl-4 space-y-1">
+                {issues.map((issue, idx) => (
+                  <li key={idx}>{issue}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={captureAndVerify}
+              disabled={isVerifying || !stream}
+              className={`w-full bg-gradient-to-r ${buttonGradient} text-white font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50 shadow-lg`}
+            >
+              {isVerifying ? (
+                <RefreshCw className="w-5 h-5 animate-spin" />
+              ) : (
+                <Camera className="w-5 h-5" />
+              )}
+              {isVerifying ? 'Memverifikasi Wajah...' : 'Absen Sekarang (Selfie)'}
+            </button>
+
+            {onBackToQR && (
+              <button
+                onClick={onBackToQR}
+                className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition"
+              >
+                <ArrowLeft size={14} /> Kembali ke Langkah 1
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
 };
+

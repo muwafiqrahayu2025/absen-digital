@@ -254,10 +254,10 @@ export const ModernQRScanner: React.FC<ModernQRScannerProps> = ({
   const isSafeGeofence = currentDistance <= maxRadius;
 
   return (
-    <div className="w-full max-w-xl mx-auto rounded-3xl bg-slate-950 text-white p-5 sm:p-7 border-2 border-indigo-500/40 shadow-[0_0_50px_rgba(79,70,229,0.35)] select-none relative overflow-hidden isolate animate-fade-in font-sans">
+    <div className="w-full max-w-xl mx-auto rounded-3xl bg-slate-900 text-slate-200 p-5 sm:p-7 border border-slate-700 shadow-[0_0_50px_rgba(0,0,0,0.5)] select-none relative overflow-hidden isolate animate-fade-in font-sans">
       {/* Background Cyber Glowing Orbs */}
-      <div className="absolute -top-24 -left-24 w-64 h-64 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none -z-10" />
-      <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-cyan-600/20 rounded-full blur-3xl pointer-events-none -z-10" />
+      <div className="absolute -top-24 -left-24 w-64 h-64 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
+      <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-cyan-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
       {/* HEADER BAR */}
       <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800/80">
@@ -273,14 +273,14 @@ export const ModernQRScanner: React.FC<ModernQRScannerProps> = ({
               <span className="text-[10px] font-bold text-slate-400 font-mono">v3.0 HUD</span>
             </div>
             <h3 className="text-base font-black tracking-tight text-white mt-0.5">
-              {mode === "check_in" ? "🎯 SCAN ABSEN MASUK (CLOCK-IN)" : "🎯 SCAN ABSEN PULANG (CLOCK-OUT)"}
+              Langkah 1: Pindai QR Code untuk Validasi
             </h3>
           </div>
         </div>
 
         <button
           onClick={() => setSoundEnabled(!soundEnabled)}
-          className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 transition"
+          className="p-2.5 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-300 transition"
           title={soundEnabled ? "Nonaktifkan Suara Sapaan" : "Aktifkan Suara Sapaan"}
         >
           {soundEnabled ? <Volume2 size={18} className="text-emerald-400" /> : <VolumeX size={18} className="text-slate-500" />}
@@ -288,7 +288,7 @@ export const ModernQRScanner: React.FC<ModernQRScannerProps> = ({
       </div>
 
       {/* SATELLITE GEOFENCE HUD BAR */}
-      <div className="bg-slate-900/90 rounded-2xl p-3 border border-slate-800/80 mb-5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+      <div className="bg-slate-950/80 rounded-2xl p-3 border border-slate-800 mb-5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
         <div className="flex items-center gap-2">
           <MapPin size={15} className={isLocating ? "text-amber-400 animate-spin" : isSafeGeofence ? "text-emerald-400" : "text-rose-400"} />
           <span className="text-slate-300">
@@ -356,7 +356,7 @@ export const ModernQRScanner: React.FC<ModernQRScannerProps> = ({
           type="button"
           onClick={handleSwitchCamera}
           disabled={!isScanning}
-          className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-2xl bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:border-slate-700 text-xs font-bold text-slate-200 transition disabled:opacity-50"
+          className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-2xl bg-slate-950 border border-slate-700 hover:bg-slate-800 hover:border-slate-600 text-xs font-bold text-slate-200 transition disabled:opacity-50"
         >
           <RefreshCw size={15} className="text-indigo-400" />
           <span>🔄 Ganti Kamera ({cameras.length})</span>
@@ -369,7 +369,7 @@ export const ModernQRScanner: React.FC<ModernQRScannerProps> = ({
           className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-2xl border text-xs font-bold transition disabled:opacity-40 ${
             isTorchOn
               ? "bg-amber-500/20 border-amber-500/60 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.3)]"
-              : "bg-slate-900 border-slate-800 hover:bg-slate-800 text-slate-200"
+              : "bg-slate-950 border-slate-700 hover:bg-slate-800 text-slate-200"
           }`}
         >
           <Zap size={15} className={isTorchOn ? "text-amber-400 fill-amber-400" : "text-slate-400"} />
@@ -379,8 +379,8 @@ export const ModernQRScanner: React.FC<ModernQRScannerProps> = ({
 
       {/* SECONDARY UPLOAD FROM GALLERY & CANCEL BUTTONS */}
       <div className="mt-4 pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <label className="w-full sm:w-auto flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-2xl bg-gradient-to-r from-indigo-900/60 to-purple-900/60 border border-indigo-500/40 hover:border-indigo-400 text-xs font-bold text-indigo-200 cursor-pointer transition">
-          <Upload size={15} className="text-cyan-400" />
+        <label className={`w-full sm:w-auto flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-2xl bg-gradient-to-r ${mode === 'check_in' ? 'from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400' : 'from-fuchsia-600 to-rose-600 hover:from-fuchsia-500 hover:to-rose-500'} text-xs font-bold text-white shadow-lg cursor-pointer transition`}>
+          <Upload size={15} className="text-white" />
           <span>📁 Pindai Foto QR / Screenshot</span>
           <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
         </label>
@@ -391,9 +391,9 @@ export const ModernQRScanner: React.FC<ModernQRScannerProps> = ({
             stopCameraScanner();
             onCancel();
           }}
-          className="w-full sm:w-auto py-2.5 px-6 rounded-2xl bg-rose-600/20 border border-rose-500/40 hover:bg-rose-600/30 text-xs font-bold text-rose-300 transition shrink-0"
+          className="w-full sm:w-auto py-2.5 px-6 rounded-2xl bg-slate-800/50 border border-slate-700 hover:bg-slate-700 hover:border-slate-600 text-xs font-bold text-slate-300 transition shrink-0"
         >
-          ❌ Tutup Scanner
+          ❌ Batal
         </button>
       </div>
 

@@ -39,7 +39,7 @@ import { useFirebaseSync } from "../hooks/useFirebaseSync";
 export function Dashboard() {
   useFirebaseSync();
   useDocumentTitle("Dasbor Eksekutif");
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [school, setSchool] = useState(() => db.getSchool());
   const [users, setUsers] = useState(() => db.getUsers());
   const [attendance, setAttendance] = useState(() => db.getAttendance());
