@@ -6,8 +6,10 @@ import { Plus, Edit2, Trash2, Layers, Building, Briefcase, Award, Search, Users,
 import toast from "react-hot-toast";
 import { QRCodeSVG } from "qrcode.react";
 import { EditableText } from "../../components/EditableText";
+import { useAuth } from "../../components/AuthContext";
 
 export function ManageUsers() {
+  const { user: currentUser } = useAuth();
   const [searchParams] = useSearchParams();
   const activeTab = searchParams.get("tab") || "pegawai";
   const roleFilter = searchParams.get("role");
@@ -28,7 +30,8 @@ export function ManageUsers() {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isOpdModalOpen, setIsOpdModalOpen] = useState(false);
   const [isSatkerModalOpen, setIsSatkerModalOpen] = useState(false);
-  const [isJababanModalOpen, setIsJababanModalOpen] = useState(false);
+  // MIN-02 FIX: typo corrected from isJababanModalOpen to isJabatanModalOpen
+  const [isJabatanModalOpen, setIsJabatanModalOpen] = useState(false);
 
   // Edit target states
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -46,7 +49,7 @@ export function ManageUsers() {
     nip: "",
     phone: "",
     email: "",
-    opd: "KEMENAG",
+    opd: "Dinas / Yayasan / Rektorat",
     satuanKerja: "",
     jabatan: "",
     mapelUtama: "",
@@ -102,11 +105,11 @@ export function ManageUsers() {
   };
 
   const handleDeleteSatker = (id: string) => {
-    if (confirm("Yakin ingin menghapus Satuan Kerja Madrasah ini?")) {
+    if (confirm("Yakin ingin menghapus Satuan Kerja ini?")) {
       const updated = satuanKerjas.filter((s) => s.id !== id);
       db.setSatuanKerjas(updated);
       setSatuanKerjas(updated);
-      toast.success("Satuan Kerja Madrasah berhasil dihapus");
+      toast.success("Satuan Kerja berhasil dihapus");
     }
   };
 
@@ -130,7 +133,7 @@ export function ManageUsers() {
       nip: "",
       phone: "",
       email: "",
-      opd: opds[0]?.singkatan || "KEMENAG",
+      opd: opds[0]?.singkatan || "Dinas / Yayasan / Rektorat",
       satuanKerja: satuanKerjas[0]?.nama || "",
       jabatan: jabatans[0]?.nama || "",
       mapelUtama: "",
@@ -154,7 +157,7 @@ export function ManageUsers() {
   const handleAddJabatanOpen = () => {
     setEditingJabatan(null);
     setJabForm({ kategori: "Guru Mapel", keterangan: "", nama: "" });
-    setIsJababanModalOpen(true);
+    setIsJabatanModalOpen(true);
   };
 
   // Open Edit Modals
@@ -168,11 +171,11 @@ export function ManageUsers() {
       nip: u.nip || "",
       phone: u.phone || "",
       email: u.email || "",
-      opd: u.opd || "KEMENAG",
+      opd: u.opd || "Dinas / Yayasan / Rektorat",
       satuanKerja:
         u.satuanKerja ||
-        "Kementerian Agama Kabupaten Depok",
-      jabatan: u.jabatan || "Guru Ahli Madya",
+        "Instansi / Sekolah / Kampus",
+      jabatan: u.jabatan || "Posisi / Jabatan",
       mapelUtama: u.mapelUtama || "",
       mapelSertifikasi: u.mapelSertifikasi || "",
     });
@@ -205,7 +208,7 @@ export function ManageUsers() {
       kat = "Lainnya"; ket = j.nama;
     }
     setJabForm({ kategori: kat, keterangan: ket, nama: j.nama });
-    setIsJababanModalOpen(true);
+    setIsJabatanModalOpen(true);
   };
 
   // Save Handlers
@@ -233,22 +236,21 @@ export function ManageUsers() {
   const handleOpdSave = (e: React.FormEvent) => {
     e.preventDefault();
     let updated: OPD[] = [];
+    // BUG-02 FIX: Use opdForm.singkatan for singkatan field, not opdForm.nama
+    const singkatan = (opdForm.singkatan || opdForm.nama).toUpperCase();
+    const nama = opdForm.nama.toUpperCase();
     if (editingOpd) {
       updated = opds.map((o) =>
         o.id === editingOpd.id
-          ? {
-              ...o,
-              singkatan: opdForm.nama.toUpperCase(),
-              nama: opdForm.nama.toUpperCase(),
-            }
+          ? { ...o, singkatan, nama }
           : o,
       );
       toast.success("OPD berhasil diubah");
     } else {
       const newItem: OPD = {
         id: String(Date.now()),
-        singkatan: opdForm.nama.toUpperCase(),
-        nama: opdForm.nama.toUpperCase(),
+        singkatan,
+        nama,
       };
       updated = [...opds, newItem];
       toast.success("OPD Baru berhasil ditambahkan");
@@ -261,23 +263,21 @@ export function ManageUsers() {
   const handleSatkerSave = (e: React.FormEvent) => {
     e.preventDefault();
     let updated: SatuanKerja[] = [];
+    // BUG-02 FIX: Use satkerForm.singkatan for singkatan field, not satkerForm.nama
+    const singkatan = (satkerForm.singkatan || satkerForm.nama).toUpperCase();
+    const nama = satkerForm.nama.toUpperCase();
     if (editingSatker) {
       updated = satuanKerjas.map((s) =>
         s.id === editingSatker.id
-          ? {
-              ...s,
-              singkatan: satkerForm.nama.toUpperCase(),
-              nama: satkerForm.nama.toUpperCase(),
-              opdId: satkerForm.opdId,
-            }
+          ? { ...s, singkatan, nama, opdId: satkerForm.opdId }
           : s,
       );
       toast.success("Satuan Kerja berhasil diubah");
     } else {
       const newItem: SatuanKerja = {
         id: String(Date.now()),
-        singkatan: satkerForm.nama.toUpperCase(),
-        nama: satkerForm.nama.toUpperCase(),
+        singkatan,
+        nama,
         opdId: satkerForm.opdId,
       };
       updated = [...satuanKerjas, newItem];
@@ -286,6 +286,33 @@ export function ManageUsers() {
     db.setSatuanKerjas(updated);
     setSatuanKerjas(updated);
     setIsSatkerModalOpen(false);
+
+    // Otomatis ganti nama Instansi Utama (SMA / SMP / Kampus Unggulan Nusantara) ketika user menginput data di satuan kerja
+    const currentSchool = db.getSchool();
+    if (currentSchool) {
+      const isDefaultSchoolName =
+        currentSchool.name === "SMA / SMP / Kampus Unggulan Nusantara" ||
+        currentSchool.name.toUpperCase() === "SMA / SMP / KAMPUS UNGGULAN NUSANTARA" ||
+        currentSchool.name.includes("Kampus Unggulan Nusantara");
+
+      if (isDefaultSchoolName || !editingSatker) {
+        const updatedSchool = {
+          ...currentSchool,
+          name: nama,
+          nama_instansi: nama,
+          kopSurat: {
+            ...(currentSchool.kopSurat || {}),
+            nama_instansi: nama,
+          }
+        };
+        db.setSchool(updatedSchool);
+        window.dispatchEvent(new Event("school_updated"));
+        window.dispatchEvent(new Event("firebase_sync_updated"));
+        if (isDefaultSchoolName) {
+          toast.success(`🎉 Nama Instansi & Kop Surat otomatis diganti menjadi: ${nama}`, { duration: 4500 });
+        }
+      }
+    }
   };
 
   const handleJabatanSave = (e: React.FormEvent) => {
@@ -307,13 +334,16 @@ export function ManageUsers() {
     }
     db.setJabatans(updated);
     setJabatans(updated);
-    setIsJababanModalOpen(false);
+    setIsJabatanModalOpen(false);
   };
 
   // Filter lists based on Search bar
   const query = searchQuery.toLowerCase();
 
   const filteredUsers = users.filter((u) => {
+    if (u.role === "developer" && currentUser?.role !== "developer") {
+      return false;
+    }
     const matchesSearch =
       (u.name || "").toLowerCase().includes(query) ||
       (u.username || "").toLowerCase().includes(query) ||
@@ -347,23 +377,23 @@ export function ManageUsers() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <div>
           <h2 className="text-2xl font-black text-slate-800 tracking-tight capitalize">
-            {activeTab === "pegawai" && <EditableText originalText="Data Guru & Staf" />}
-            {activeTab === "opd" && <EditableText originalText="Master Yayasan" />}
-            {activeTab === "satker" && <EditableText originalText="Master Data Madrasah" />}
+            {activeTab === "pegawai" && <EditableText originalText="Data Pegawai / Guru / Dosen" />}
+            {activeTab === "opd" && <EditableText originalText="Master Lembaga / Yayasan / Dinas" />}
+            {activeTab === "satker" && <EditableText originalText="Master Satuan Kerja / Sekolah / Kampus" />}
             {activeTab === "jabatan" && <EditableText originalText="Master Data Jabatan" />}
           </h2>
           <p className="text-sm text-slate-400 mt-0.5">
             {activeTab === "pegawai" && (
-              <EditableText originalText="Manajemen data login personal guru & staf tata usaha, pembagian jabatan, dan NUPTK/NRG/PegID/NPK." />
+              <EditableText originalText="Manajemen data login personal pegawai / guru / dosen / staf, pembagian jabatan, dan ID Pegawai / NIP / NIDN / NIK." />
             )}
             {activeTab === "opd" && (
-              <EditableText originalText="Daftar penanggung jawab Yayasan penyelenggara madrasah." />
+              <EditableText originalText="Daftar lembaga naungan (Dinas / Yayasan / Rektorat) penyelenggara instansi atau sekolah." />
             )}
             {activeTab === "satker" && (
-              <EditableText originalText="Daftar unit koordinatif pelayanan Madrasah." />
+              <EditableText originalText="Daftar satuan kerja atau unit pelayanan sekolah / kampus / instansi." />
             )}
             {activeTab === "jabatan" && (
-              <EditableText originalText="Pengaturan spesifikasi formasi jabatan guru & staf." />
+              <EditableText originalText="Pengaturan spesifikasi formasi jabatan pegawai / guru / dosen." />
             )}
           </p>
         </div>
@@ -376,12 +406,12 @@ export function ManageUsers() {
             if (activeTab === "satker") handleAddSatkerOpen();
             if (activeTab === "jabatan") handleAddJabatanOpen();
           }}
-          className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl theme-gradient border border-white/20 shadow-md hover:shadow-lg hover:-translate-y-[2px] active:translate-y-[2px] transition-all duration-200"
+          className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
         >
           <Plus size={16} />
-          {activeTab === "pegawai" && <EditableText originalText="Tambah Guru/Staf" />}
-          {activeTab === "opd" && <EditableText originalText="Tambah Yayasan" />}
-          {activeTab === "satker" && <EditableText originalText="Tambah Madrasah" />}
+          {activeTab === "pegawai" && <EditableText originalText="Tambah Pegawai / Guru" />}
+          {activeTab === "opd" && <EditableText originalText="Tambah Lembaga" />}
+          {activeTab === "satker" && <EditableText originalText="Tambah Satuan Kerja" />}
           {activeTab === "jabatan" && <EditableText originalText="Tambah Jabatan" />}
         </button>
       </div>
@@ -412,8 +442,8 @@ export function ManageUsers() {
             <table className="w-full text-left text-xs font-sans">
               <thead className="bg-[#17a2b8] text-white">
                 <tr>
-                  <th className="p-4">Foto / Biodata Guru-Staf</th>
-                  <th className="p-4">NUPTK / NRG / PegID / NPK</th>
+                  <th className="p-4">Foto / Biodata Pegawai</th>
+                  <th className="p-4">ID Pegawai / NIP / NIDN / NIK</th>
                   <th className="p-4">Organisasi / Lembaga</th>
                   <th className="p-4">Unit Satker</th>
                   <th className="p-4">Jabatan Fungsional</th>
@@ -432,17 +462,25 @@ export function ManageUsers() {
                     <tr key={u.id} className="hover:bg-slate-50/60 transition">
                       <td className="p-4 flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 shrink-0 border border-slate-200">
-                          <img
-                            src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80"
-                            alt={u.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.onerror = null;
-                              target.src =
-                                "https://cdn-icons-png.flaticon.com/512/3135/3135715.png";
-                            }}
-                          />
+                          {/* BUG-09 FIX: Use actual user photoUrl instead of hardcoded Unsplash image */}
+                          {u.photoUrl ? (
+                            <img
+                              src={u.photoUrl}
+                              alt={u.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <img
+                              src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png"
+                              alt={u.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.onerror = null;
+                                target.src = "https://cdn-icons-png.flaticon.com/512/3135/3135715.png";
+                              }}
+                            />
+                          )}
                         </div>
                         <div>
                           <div className="font-extrabold text-slate-800 text-sm leading-tight">
@@ -457,7 +495,7 @@ export function ManageUsers() {
                         {u.nip || "—"}
                       </td>
                       <td className="p-4 font-bold text-slate-800">
-                        {u.opd || "KEMENAG"}
+                        {u.opd || "Dinas / Yayasan / Rektorat"}
                       </td>
                       <td className="p-4 text-slate-500 text-[11px] max-w-xs truncate">
                         {u.satuanKerja || "—"}
@@ -575,7 +613,7 @@ export function ManageUsers() {
               <thead className="bg-[#17a2b8] text-white">
                 <tr>
                   <th className="p-4 text-center w-16">No</th>
-                  <th className="p-4">Nama Lengkap Madrasah / Sekolah</th>
+                  <th className="p-4">Nama Lengkap Satuan Kerja / Sekolah / Kampus</th>
                   <th className="p-4">Lembaga Naungan</th>
                   <th className="p-4 text-right w-36">Aksi</th>
                 </tr>
@@ -726,7 +764,7 @@ export function ManageUsers() {
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                    NUPTK / NRG / PegID / NPK
+                    ID Pegawai / NIP / NIDN / NIK
                   </label>
                   <input
                     required
@@ -753,11 +791,13 @@ export function ManageUsers() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
                       Password Sesi
                     </label>
+                    {/* UX-06 FIX: type="password" so plaintext isn't visible */}
                     <input
                       required
+                      type="password"
                       value={userForm.password}
                       onChange={(e) =>
                         setUserForm({ ...userForm, password: e.target.value })
@@ -788,7 +828,7 @@ export function ManageUsers() {
 
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                    Satuan Kerja / Madrasah
+                    Satuan Kerja / Sekolah / Kampus
                   </label>
                   <select
                     value={userForm.satuanKerja}
@@ -826,7 +866,7 @@ export function ManageUsers() {
                   </select>
                 </div>
 
-                <div>
+                  <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
                     Akses Portal / Role
                   </label>
@@ -837,14 +877,18 @@ export function ManageUsers() {
                     }
                     className="w-full px-3.5 py-2 border border-slate-200 bg-white rounded-xl"
                   >
-                    <option value="guru">Guru (Pembina/Pengajar)</option>
-                    <option value="staf_sekolah">
-                      Staf Sekolah (Tata Usaha/Operator)
-                    </option>
-                    <option value="kepala_madrasah">Kepala Madrasah</option>
-                    <option value="admin">Admin Madrasah</option>
+                    <option value="guru">Guru (Pengajar Sekolah)</option>
+                    <option value="dosen">Dosen (Pengajar Kampus)</option>
+                    <option value="staf_sekolah">Staf / Tenaga Kependidikan Sekolah</option>
+                    <option value="staf_kampus">Staf / Tenaga Kependidikan Kampus</option>
+                    <option value="kepala_sekolah">Pimpinan (Kepsek / Rektor / Direktur)</option>
+                    <option value="admin">Administrator Sistem</option>
+                    {currentUser?.role === "developer" && (
+                      <option value="developer">SaaS Developer / Dev</option>
+                    )}
                   </select>
                 </div>
+
 
                 {userForm.role === "guru" && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-l-4 border-sky-400 pl-3 bg-sky-50/50 p-3 rounded-xl">
@@ -876,21 +920,21 @@ export function ManageUsers() {
                         }
                         className="w-full px-3.5 py-2 text-xs border border-sky-200 bg-white rounded-xl focus:outline-none focus:border-sky-500"
                       />
-                      <p className="text-[9px] text-slate-400 mt-0.5">Sesuai NRG / Bidang Sertifikasi</p>
+                      <p className="text-[9px] text-slate-400 mt-0.5">Sesuai Bidang Keahlian / Keilmuan / Sertifikasi</p>
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="p-6 border-t border-slate-100 flex gap-3 shrink-0">
+              <div className="p-6 border-t border-slate-100 flex gap-3 shrink-0 justify-end">
                 <button
                   type="button"
                   onClick={() => setIsUserModalOpen(false)}
-                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl theme-gradient border border-white/20 shadow-md hover:shadow-lg hover:-translate-y-[2px] active:translate-y-[2px] transition-all duration-200"
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
                 ><X size={16} /> Batal</button>
                 <button
                   type="submit"
-                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl theme-gradient border border-white/20 shadow-md hover:shadow-lg hover:-translate-y-[2px] active:translate-y-[2px] transition-all duration-200"
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
                 >
                   <Save className="w-4 h-4" /> {editingUser ? "Simpan Perubahan" : "Tambah Personel"}
                 </button>
@@ -934,15 +978,15 @@ export function ManageUsers() {
                   placeholder="Contoh: KEMENTERIAN AGAMA KABUPATEN DEPOK"
                 />
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-4 justify-end">
                 <button
                   type="button"
                   onClick={() => setIsOpdModalOpen(false)}
-                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl theme-gradient border border-white/20 shadow-md hover:shadow-lg hover:-translate-y-[2px] active:translate-y-[2px] transition-all duration-200"
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
                 ><X size={16} /> Batal</button>
                 <button
                   type="submit"
-                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl theme-gradient border border-white/20 shadow-md hover:shadow-lg hover:-translate-y-[2px] active:translate-y-[2px] transition-all duration-200"
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
                 >
                   <Save className="w-4 h-4" /> Simpan Lembaga
                 </button>
@@ -964,8 +1008,8 @@ export function ManageUsers() {
             </button>
             <h3 className="text-lg font-black text-slate-800 mb-4 pr-8">
               {editingSatker
-                ? "Edit Madrasah"
-                : "Tambah Satuan Kerja Madrasah Baru"}
+                ? "Edit Satuan Kerja / Sekolah"
+                : "Tambah Satuan Kerja / Sekolah Baru"}
             </h3>
             <form
               onSubmit={handleSatkerSave}
@@ -974,7 +1018,7 @@ export function ManageUsers() {
 
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                  Nama Madrasah / Sekolah Lengkap
+                  Nama Satuan Kerja / Sekolah Lengkap
                 </label>
                 <input
                   required
@@ -983,7 +1027,7 @@ export function ManageUsers() {
                     setSatkerForm({ ...satkerForm, nama: e.target.value })
                   }
                   className="w-full px-3.5 py-2 border border-slate-200 rounded-xl"
-                  placeholder="Contoh: NAMA MADRASAH ANDA"
+                  placeholder="Contoh: NAMA INSTANSI / SEKOLAH ANDA"
                 />
               </div>
               <div>
@@ -999,22 +1043,22 @@ export function ManageUsers() {
                 >
                   {opds.map((o) => (
                     <option key={o.id} value={o.id}>
-                      {o.singkatan} - {o.nama}
+                      {o.nama}
                     </option>
                   ))}
                 </select>
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-4 justify-end">
                 <button
                   type="button"
                   onClick={() => setIsSatkerModalOpen(false)}
-                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl theme-gradient border border-white/20 shadow-md hover:shadow-lg hover:-translate-y-[2px] active:translate-y-[2px] transition-all duration-200"
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
                 ><X size={16} /> Batal</button>
                 <button
                   type="submit"
-                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl theme-gradient border border-white/20 shadow-md hover:shadow-lg hover:-translate-y-[2px] active:translate-y-[2px] transition-all duration-200"
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
                 >
-                  <Save className="w-4 h-4" /> Simpan Madrasah
+                  <Save className="w-4 h-4" /> Simpan Satuan Kerja
                 </button>
               </div>
             </form>
@@ -1023,11 +1067,11 @@ export function ManageUsers() {
       )}
 
       {/* D. JABATAN MODAL */}
-      {isJababanModalOpen && (
+      {isJabatanModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-slate-100 relative">
             <button 
-              onClick={() => setIsJababanModalOpen(false)}
+              onClick={() => setIsJabatanModalOpen(false)}
               className="absolute top-4 right-4 p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors"
             >
               <X size={20} />
@@ -1081,15 +1125,15 @@ export function ManageUsers() {
                   </>
                 )}
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-4 justify-end">
                 <button
                   type="button"
-                  onClick={() => setIsJababanModalOpen(false)}
-                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl theme-gradient border border-white/20 shadow-md hover:shadow-lg hover:-translate-y-[2px] active:translate-y-[2px] transition-all duration-200"
+                  onClick={() => setIsJabatanModalOpen(false)}
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
                 ><X size={16} /> Batal</button>
                 <button
                   type="submit"
-                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl theme-gradient border border-white/20 shadow-md hover:shadow-lg hover:-translate-y-[2px] active:translate-y-[2px] transition-all duration-200"
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
                 >
                   <Save className="w-4 h-4" /> Simpan Jabatan
                 </button>

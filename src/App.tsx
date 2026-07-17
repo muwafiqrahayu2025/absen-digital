@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider, useAuth } from "./components/AuthContext";
 import { ThemeProvider } from "./components/ThemeContext";
@@ -22,6 +22,50 @@ import { PrintRecap } from "./pages/principal/PrintRecap";
 import { SchoolScanner } from "./pages/admin/SchoolScanner";
 import { DeveloperConsole } from "./pages/admin/DeveloperConsole";
 import { FloatingEditTools } from "./components/FloatingEditTools";
+import { LandingPage } from "./pages/LandingPage";
+import { DeviceRegistrationModal } from "./components/DeviceRegistrationModal";
+import { LocalValidationCenter } from "./pages/admin/LocalValidationCenter";
+import { ManageLicenses } from "./pages/admin/ManageLicenses";
+import { AiAnalytics } from "./pages/admin/AiAnalytics";
+import { LiveQRView } from "./pages/LiveQRView";
+import { initNotificationQueueProcessor } from "./lib/notificationQueue";
+import { initializeFirebaseSync } from "./lib/firebaseSync";
+
+
+// Inisialisasi Notification Queue Processor (background job sekali saat app dimuat)
+initNotificationQueueProcessor();
+
+function RootRouteHandler() {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) return null;
+  if (!user) {
+    if (location.pathname === "/" || location.pathname === "") {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true || window.location.protocol === 'file:' || Boolean((window as any).__TAURI__) || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const isRegisteredDevice = Boolean(localStorage.getItem('abdi_registration_token'));
+      if (isStandalone || isRegisteredDevice) {
+        return <Navigate to="/login" replace />;
+      }
+      return <LandingPage />;
+    }
+    const search = window.location.search;
+    if (search) {
+      sessionStorage.setItem("login_redirect_search", search);
+      sessionStorage.setItem("login_redirect_pathname", window.location.pathname);
+    }
+    return <Navigate to="/login" replace />;
+  }
+  return <Layout />;
+}
+
+function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user) {
+    return <Navigate to="/" replace />;
+  }
+  return <>{children}</>;
+}
 
 function ProtectedRoute({
   children,
@@ -30,7 +74,8 @@ function ProtectedRoute({
   children: React.ReactNode;
   allowedRoles?: string[];
 }) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  if (loading) return null;
   if (!user) {
     // Preserve search params for direct phone scans
     const search = window.location.search;
@@ -59,6 +104,11 @@ export default function App() {
       }
     };
     checkRoot();
+
+    const cleanupSync = initializeFirebaseSync();
+    return () => {
+      if (typeof cleanupSync === 'function') cleanupSync();
+    };
   }, []);
 
   if (isRooted) {
@@ -79,27 +129,29 @@ export default function App() {
   return (
     <ThemeProvider>
       <EditModeProvider>
-        <AuthProvider>
-          <FloatingEditTools />
-          <Toaster position="top-right" />
-          <BrowserRouter>
+        <BrowserRouter>
+          <AuthProvider>
+            <DeviceRegistrationModal />
+            <FloatingEditTools />
+            <Toaster position="top-right" />
             <Routes>
-              <Route path="/login" element={<Login />} />
+              <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+              <Route path="/landing" element={<PublicOnlyRoute><LandingPage /></PublicOnlyRoute>} />
+              <Route path="/home" element={<PublicOnlyRoute><LandingPage /></PublicOnlyRoute>} />
+              <Route path="/live-qr" element={<LiveQRView />} />
+              <Route path="/live-qr/:id" element={<LiveQRView />} />
+
               <Route
                 path="/print/recap"
                 element={
-                  <ProtectedRoute allowedRoles={["admin", "kepala_madrasah", "developer"]}>
+                  <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
                     <PrintRecap />
                   </ProtectedRoute>
                 }
               />
               <Route
                 path="/"
-                element={
-                  <ProtectedRoute>
-                    <Layout />
-                  </ProtectedRoute>
-                }
+                element={<RootRouteHandler />}
               >
                 <Route index element={<Dashboard />} />
                 <Route path="profile" element={<Profile />} />
@@ -115,7 +167,7 @@ export default function App() {
                 <Route
                   path="admin/school"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "developer"]}>
+                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
                       <ManageSchool />
                     </ProtectedRoute>
                   }
@@ -139,7 +191,7 @@ export default function App() {
                 <Route
                   path="admin/recaps"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "developer"]}>
+                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
                       <PrincipalAttendanceRecaps />
                     </ProtectedRoute>
                   }
@@ -147,15 +199,23 @@ export default function App() {
                 <Route
                   path="admin/attendance"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "kepala_madrasah", "developer"]}>
+                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
                       <ManageAttendance />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="admin/validation"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
+                      <LocalValidationCenter />
                     </ProtectedRoute>
                   }
                 />
                 <Route
                   path="admin/leave"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "kepala_madrasah", "developer"]}>
+                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
                       <ManageLeave />
                     </ProtectedRoute>
                   }
@@ -163,7 +223,7 @@ export default function App() {
                 <Route
                   path="admin/schedule"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "kepala_madrasah", "developer"]}>
+                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
                       <ManageSchedule />
                     </ProtectedRoute>
                   }
@@ -179,7 +239,7 @@ export default function App() {
                 <Route
                   path="admin/school-scanner"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "kepala_madrasah", "developer"]}>
+                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
                       <SchoolScanner />
                     </ProtectedRoute>
                   }
@@ -192,11 +252,27 @@ export default function App() {
                     </ProtectedRoute>
                   }
                 />
+                <Route
+                  path="admin/licenses"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
+                      <ManageLicenses />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="admin/ai-analytics"
+                  element={
+                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
+                      <AiAnalytics />
+                    </ProtectedRoute>
+                  }
+                />
 
                 <Route
                   path="teacher/scan"
                   element={
-                    <ProtectedRoute allowedRoles={["guru", "staf_sekolah"]}>
+                    <ProtectedRoute allowedRoles={["guru", "staf_sekolah", "dosen", "staf_kampus", "kepala_sekolah", "admin", "developer"]}>
                       <ScanQR />
                     </ProtectedRoute>
                   }
@@ -205,15 +281,15 @@ export default function App() {
                 <Route
                   path="principal/recaps"
                   element={
-                    <ProtectedRoute allowedRoles={["kepala_madrasah"]}>
+                    <ProtectedRoute allowedRoles={["kepala_sekolah", "admin", "developer"]}>
                       <PrincipalAttendanceRecaps />
                     </ProtectedRoute>
                   }
                 />
               </Route>
             </Routes>
-          </BrowserRouter>
-        </AuthProvider>
+          </AuthProvider>
+        </BrowserRouter>
       </EditModeProvider>
     </ThemeProvider>
   );

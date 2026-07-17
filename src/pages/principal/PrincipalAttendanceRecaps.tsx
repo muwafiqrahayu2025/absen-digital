@@ -17,7 +17,8 @@ import toast from "react-hot-toast";
 export function PrincipalAttendanceRecaps() {
   const [jenisRekap, setJenisRekap] = useState("");
   const [bulan, setBulan] = useState("");
-  const activeAcademicYear = db.getAcademicYears().find((ay) => ay.isActive);
+  const activeAcademicYear = db.getAcademicYears().find((ay) => ay && ay.isActive);
+  const school = db.getSchool();
 
   // Generate last 6 months for options
   const monthOptions = [
@@ -57,28 +58,54 @@ export function PrincipalAttendanceRecaps() {
       import("jspdf-autotable").then(({ default: autoTable }) => {
         const doc = new jsPDF("landscape");
         const school = db.getSchool();
+        const kop = school?.kopSurat || {};
+        const logoBase64 = kop.logo_url || school?.logo_url || school?.logoUrl;
 
+        let startY = 15;
+        // Jika ada logo berupa data base64, pasang di pojok kiri atas
+        if (logoBase64 && logoBase64.startsWith("data:image/")) {
+          try {
+            doc.addImage(logoBase64, "JPEG", 14, startY - 3, 22, 22);
+          } catch (err) {
+            console.warn("Gagal merender logo ke PDF:", err);
+          }
+        }
+
+        const textStartX = logoBase64 && logoBase64.startsWith("data:image/") ? 40 : 14;
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text((kop.nama_dinas || school?.nama_dinas || "YAYASAN PENDIDIKAN DAN KEBUDAYAAN").toUpperCase(), textStartX, startY);
+        
         doc.setFontSize(14);
-        doc.text(
-          "Laporan Rekapitulasi Presensi Guru & Staf Madrasah",
-          14,
-          15,
-        );
-        doc.setFontSize(11);
-        doc.text(`Instansi: ${school?.name || "KEMENAG"}`, 14, 22);
-        doc.text(
-          `Alamat  : ${school?.address || "Gedung Dibaleka, Jl. Margonda Raya No. 54"}`,
-          14,
-          28,
-        );
+        doc.text((kop.nama_instansi || school?.nama_instansi || school?.name || "INSTANSI PENDIDIKAN UNGGULAN").toUpperCase(), textStartX, startY + 6);
 
-        doc.text(`Tahun Ajaran   : ${activeAcademicYear?.name || "2026/2027"}`, 14, 38);
-        doc.text(`Semester       : ${activeAcademicYear?.semester || "Ganjil"}`, 14, 43);
-        doc.text(`Sifat Dokumen  : Laporan Umum Internal`, 14, 48);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.text(kop.alamat || school?.alamat || school?.address || "Alamat lengkap instansi/sekolah", textStartX, startY + 11);
+
+        const kontakStr = `Telp: ${kop.telepon || school?.phone || "—"} | Email: ${kop.email || school?.adminEmail || "—"} | Web: ${kop.website || "—"} | Pos: ${kop.kode_pos || "—"}`;
+        doc.text(kontakStr, textStartX, startY + 16);
+
+        // Garis pembatas kop surat
+        doc.setLineWidth(0.8);
+        doc.line(14, startY + 20, 280, startY + 20);
+        doc.setLineWidth(0.3);
+        doc.line(14, startY + 21.5, 280, startY + 21.5);
+
+        // Sub judul dokumen
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text("REKAPITULASI DAFTAR HADIR BULANAN PEGAWAI / GURU / DOSEN", 14, startY + 29);
+
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Tahun Ajaran   : ${activeAcademicYear?.name || "2026/2027"} (${activeAcademicYear?.semester || "Ganjil"})`, 14, startY + 36);
+        doc.text(`Sifat Dokumen  : Laporan Umum Internal (Terverifikasi Sistem)`, 14, startY + 41);
 
         if (jenisRekap === "perbulan" && bulan) {
           const monthObj = monthOptions.find((m) => m.value === bulan);
-          doc.text(`Periode Bulan   : ${monthObj?.label || bulan}`, 14, 53);
+          doc.text(`Periode Bulan   : ${monthObj?.label || bulan}`, 14, startY + 46);
         }
 
         const users = db.getUsers();
@@ -106,7 +133,7 @@ export function PrincipalAttendanceRecaps() {
             index + 1,
             `${usr.nip || "-"}`,
             usr.name,
-            usr.opd || "KEMENAG",
+            usr.opd || "Dinas / Yayasan / Rektorat",
             usr.jabatan || "Guru Utama",
             masukH || "0",
             masukS || "0",
@@ -120,7 +147,7 @@ export function PrincipalAttendanceRecaps() {
         });
 
         autoTable(doc, {
-          startY: 60,
+          startY: 68,
           head: [
             [
               {
@@ -129,12 +156,12 @@ export function PrincipalAttendanceRecaps() {
                 styles: { halign: "center", valign: "middle" },
               },
               {
-                content: "NUPTK / NRG / PegID / NPK",
+                content: "ID Pegawai / NIP / NIDN / NIK",
                 rowSpan: 2,
                 styles: { halign: "center", valign: "middle" },
               },
               {
-                content: "Nama Guru & Staf",
+                content: "Nama Pegawai / Guru / Dosen",
                 rowSpan: 2,
                 styles: { halign: "center", valign: "middle" },
               },
@@ -219,10 +246,10 @@ export function PrincipalAttendanceRecaps() {
 
       rowData.push({
         No: index + 1,
-        "NUPTK / NRG / PegID / NPK": usr.nip || "-",
-        "Nama Guru/Staf": usr.name,
-        Lembaga: usr.opd || "KEMENAG",
-        Jabatan: usr.jabatan || "Guru Utama",
+        "ID Pegawai / NIP / NIDN / NIK": usr.nip || "-",
+        "Nama Pegawai / Guru / Dosen": usr.name,
+        Lembaga: usr.opd || "Dinas / Yayasan / Rektorat",
+        Jabatan: usr.jabatan || "Pegawai / Guru / Dosen",
         "Masuk (Hadir)": masukH,
         "Masuk (Sakit)": masukS,
         "Masuk (Izin/Cuti)": masukI,
@@ -236,7 +263,7 @@ export function PrincipalAttendanceRecaps() {
 
     const ws = XLSX.utils.json_to_sheet(rowData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Rekap_Madrasah");
+    XLSX.utils.book_append_sheet(wb, ws, "Rekap_Presensi");
     const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     const blob = new Blob([excelBuffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8",
@@ -266,8 +293,8 @@ export function PrincipalAttendanceRecaps() {
 
       <div className="bg-white rounded-3xl border border-slate-200 p-6">
         <div className="grid grid-cols-[165px_1fr] gap-y-3 gap-x-2 text-xs text-slate-650 font-mono uppercase">
-          <div className="font-bold">Lembaga Naungan</div>
-          <div>: KEMENAG</div>
+          <div className="font-bold">Lembaga / Instansi Induk</div>
+          <div>: {school?.name ? (school.name.includes(" / ") ? "Dinas / Yayasan / Rektorat" : school.name) : "Dinas / Yayasan / Rektorat / Instansi"}</div>
 
           <div className="font-bold">Tahun Ajaran</div>
           <div>

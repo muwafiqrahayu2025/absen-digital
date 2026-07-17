@@ -22,7 +22,7 @@ export function ManageSchedule() {
   const loadData = () => {
     setSchedules(db.getSchedules());
     const allUsers = db.getUsers();
-    setTeachers(allUsers.filter(u => u.role === 'guru' || u.role === 'kepala_madrasah'));
+    setTeachers(allUsers.filter(u => u.role === 'guru' || u.role === 'dosen' || u.role === 'kepala_sekolah'));
   };
 
   useEffect(() => {
@@ -81,12 +81,12 @@ export function ManageSchedule() {
             Manajemen Jadwal
           </h2>
           <p className="text-sm text-gray-500 mt-1">
-            Kelola jadwal pelajaran dan kegiatan Madrasah per hari.
+            Kelola jadwal pelajaran dan kegiatan instansi / sekolah / kampus per hari.
           </p>
         </div>
         <button 
           onClick={openAddModal}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-full font-bold flex items-center gap-2 shadow-sm transition-all hover:shadow-md"
+          className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
         >
           <Plus size={18} /> Tambah Jadwal
         </button>

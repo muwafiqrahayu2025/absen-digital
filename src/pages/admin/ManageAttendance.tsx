@@ -21,8 +21,10 @@ import { saveAs } from "file-saver";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import { CutiRequest, AttendanceRecord } from "../../types";
+import { useAuth } from "../../components/AuthContext";
 
 export function ManageAttendance() {
+  const { user: currentUser } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get("tab") || "data"; // 'data' or 'approval'
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
@@ -35,7 +37,7 @@ export function ManageAttendance() {
     db.getCutiRequests(),
   );
   const [users, setUsers] = useState(() => db.getUsers());
-  const activeAcademicYear = db.getAcademicYears().find((ay) => ay.isActive);
+  const activeAcademicYear = db.getAcademicYears().find((ay) => ay && ay.isActive);
 
   useEffect(() => {
     const handleSync = () => {
@@ -52,15 +54,22 @@ export function ManageAttendance() {
   }, []);
 
   const latestScans = [...attendanceList]
-    .filter((a) => a.checkInTime || a.checkOutTime)
+    .filter((a) => {
+      if (!a.checkInTime && !a.checkOutTime) return false;
+      const usr = users.find((u) => u.id === a.userId);
+      if (usr?.role === "developer" && currentUser?.role !== "developer") return false;
+      return true;
+    })
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 10);
 
-  // Approval actions for Izin / Cuti Requests
+  // BUG-01 FIX: Read targetCuti from CURRENT cutiList BEFORE mapping
   const handleCutiApproval = (
     cutiId: string,
     action: "Approved" | "Rejected",
   ) => {
+    const targetCuti = cutiList.find((c) => c.id === cutiId);
+
     const updatedCuti = cutiList.map((c) => {
       if (c.id === cutiId) {
         return { ...c, status: action };
@@ -70,8 +79,7 @@ export function ManageAttendance() {
     db.setCutiRequests(updatedCuti);
     setCutiList(updatedCuti);
 
-    // If approved, dynamically insert attendance records across the range
-    const targetCuti = cutiList.find((c) => c.id === cutiId);
+    let attendanceInsertSuccess = true;
     if (action === "Approved" && targetCuti) {
       try {
         const start = parseISO(targetCuti.tanggalMulai);
@@ -82,7 +90,6 @@ export function ManageAttendance() {
         days.forEach((day) => {
           const formattedDate = format(day, "yyyy-MM-dd");
 
-          // Check if record exists
           const existingIdx = currentAttendance.findIndex(
             (a) => a.date === formattedDate && a.userId === targetCuti.userId,
           );
@@ -107,13 +114,17 @@ export function ManageAttendance() {
         db.setAttendance(currentAttendance);
         setAttendanceList(currentAttendance);
       } catch (e) {
+        attendanceInsertSuccess = false;
         console.error("Failed to create attendance entries for cuti", e);
+        toast.error("Persetujuan berhasil, tapi gagal mencatat presensi otomatis.");
       }
     }
 
-    toast.success(
-      `Pengajuan Cuti berhasil ${action === "Approved" ? "disetujui (Presensi otomatis dicatat)" : "ditolak"}!`,
-    );
+    if (attendanceInsertSuccess) {
+      toast.success(
+        `Pengajuan berhasil ${action === "Approved" ? "disetujui (Presensi otomatis dicatat)" : "ditolak"}!`,
+      );
+    }
     window.dispatchEvent(new Event("cuti_updated"));
   };
 
@@ -122,14 +133,18 @@ export function ManageAttendance() {
     setSelectedMonth(null);
   };
 
-  const months = [
-    { value: "2026-06", label: "Juni 2026" },
-    { value: "2026-05", label: "Mei 2026" },
-    { value: "2026-04", label: "April 2026" },
-    { value: "2026-03", label: "Maret 2026" },
-    { value: "2026-02", label: "Februari 2026" },
-    { value: "2026-01", label: "Januari 2026" },
-  ];
+  // BUG-05 FIX: Generate months dynamically based on current date instead of hardcoding 2026
+  const months = (() => {
+    const result: { value: string; label: string }[] = [];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const value = format(d, "yyyy-MM");
+      const label = format(d, "MMMM yyyy", { locale: id });
+      result.push({ value, label: label.charAt(0).toUpperCase() + label.slice(1) });
+    }
+    return result;
+  })();
 
   if (selectedMonth) {
     const selectedMonthLabel = months.find(
@@ -142,9 +157,10 @@ export function ManageAttendance() {
 
     const filteredUsers = users.filter(
       (usr) =>
-        usr.name.toLowerCase().includes(pegawaiSearch.toLowerCase()) ||
-        (usr.nip &&
-          usr.nip.toLowerCase().includes(pegawaiSearch.toLowerCase())),
+        (usr.role !== "developer" || currentUser?.role === "developer") &&
+        (usr.name.toLowerCase().includes(pegawaiSearch.toLowerCase()) ||
+          (usr.nip &&
+            usr.nip.toLowerCase().includes(pegawaiSearch.toLowerCase()))),
     );
 
     const handleExportExcel = () => {
@@ -160,10 +176,10 @@ export function ManageAttendance() {
 
         const row: any = {
           No: index + 1,
-          "Nama Guru/Staf": usr.name,
-          "NUPTK / NRG / PegID / NPK Kepegawaian": `/${usr.nip || "-"}`,
-          "Lembaga Naungan": usr.opd || "KEMENAG",
-          Jabatan: usr.jabatan || "Guru Utama",
+          "Nama Pegawai / Guru / Dosen": usr.name,
+          "ID Pegawai / NIP / NIDN / NIK": `/${usr.nip || "-"}`,
+          "Lembaga Naungan": usr.opd || "Dinas / Yayasan / Rektorat",
+          Jabatan: usr.jabatan || "Posisi / Jabatan",
         };
 
         days.forEach((d) => {
@@ -172,10 +188,15 @@ export function ManageAttendance() {
           let statusStr = "";
           let CheckOutMark = "";
 
-          if (record) {
-            if (record.status === "Hadir" || record.status === "Terlambat") {
+        if (record) {
+            if (record.status === "Hadir") {
               totalH++;
               statusStr = "H";
+            }
+            // BUG-08 FIX: Terlambat gets its own "T" code, not merged with "H"
+            if (record.status === "Terlambat") {
+              totalH++;
+              statusStr = "T";
             }
             if (record.status === "Sakit") {
               totalS++;
@@ -276,9 +297,9 @@ export function ManageAttendance() {
 
           <div className="border-l-4 border-l-[#ffc107] pl-4 text-xs text-slate-700 grid grid-cols-[140px_1fr] gap-1 mb-6 font-mono uppercase bg-slate-50 p-4 rounded-xl">
             <div className="font-bold">Portal Induk</div>
-            <div>: ABSENSI MADRASAH</div>
-            <div className="font-bold">Lembaga Naungan</div>
-            <div>: KEMENTERIAN AGAMA KABUPATEN DEPOK</div>
+            <div>: SISTEM PRESENSI & MANAJEMEN DIGITAL</div>
+            <div className="font-bold">Lembaga / Instansi</div>
+            <div>: {db.getSchool().name ? (db.getSchool().name.includes(" / ") ? "Dinas / Yayasan / Rektorat / Instansi" : db.getSchool().name) : "Dinas / Yayasan / Rektorat / Instansi"}</div>
             <div className="font-bold">Periode Laporan</div>
             <div>: {selectedMonthLabel}</div>
           </div>
@@ -286,11 +307,11 @@ export function ManageAttendance() {
           {/* Live Search Block */}
           <div className="mb-4 bg-slate-50 p-4 rounded-3xl border border-slate-150 flex flex-col sm:flex-row gap-3 items-center">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-widest shrink-0 text-[#1d74f2]">
-              Pencarian Guru/Staf:
+              Pencarian Pegawai:
             </span>
             <input
               type="text"
-              placeholder="Ketik nama atau NUPTK / NRG / PegID / NPK..."
+              placeholder="Ketik nama atau ID Pegawai / NIP / NIDN / NIK..."
               value={pegawaiSearch}
               onChange={(e) => setPegawaiSearch(e.target.value)}
               className="w-full px-4 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none"
@@ -311,13 +332,13 @@ export function ManageAttendance() {
                     rowSpan={2}
                     className="p-3 border border-slate-250 min-w-[150px]"
                   >
-                    Nama Guru / Staf
+                    Nama Pegawai / Guru / Dosen
                   </th>
                   <th
                     rowSpan={2}
                     className="p-3 border border-slate-250 min-w-[150px]"
                   >
-                    NUPTK / NRG / PegID / NPK
+                    ID Pegawai / NIP / NIDN / NIK
                   </th>
                   <th
                     rowSpan={2}
@@ -399,7 +420,7 @@ export function ManageAttendance() {
                           {usr.nip || "—"}
                         </td>
                         <td className="p-3 border border-slate-200 text-center text-indigo-600 font-bold text-[10px]">
-                          {usr.opd || "KEMENAG"}
+                          {usr.opd || "Dinas / Yayasan / Rektorat"}
                         </td>
 
                         {days.map((d) => {
@@ -504,7 +525,7 @@ export function ManageAttendance() {
       <div className="bg-white rounded-3xl border border-slate-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <h4 className="font-extrabold text-[#111c2d] text-sm">
-            Disiplin Presensi Yayasan / Kemenag & Aturan Pokok Akademik
+            Disiplin Presensi Instansi / Sekolah / Kampus & Aturan Pokok Akademik
           </h4>
           <p className="text-xs text-slate-400 font-sans max-w-xl">
             Pilih bulan rekap kepegawaian di bawah ini untuk melihat tabulasi
@@ -547,7 +568,7 @@ export function ManageAttendance() {
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               Memantau jarak sesungguhnya antara pemohon absensi dengan geofence
-              lingkungan Madrasah.
+              lingkungan Instansi / Sekolah / Kampus.
             </p>
           </div>
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#17a2b8]/10 text-slate-700 text-xs font-mono font-bold">
@@ -560,7 +581,7 @@ export function ManageAttendance() {
             <thead className="bg-[#17a2b8] text-white">
               <tr>
                 <th className="p-3">Waktu & Tanggal</th>
-                <th className="p-3">Guru / Staf Madrasah</th>
+                <th className="p-3">Pegawai / Guru / Dosen</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Metode Presensi</th>
                 <th className="p-3 text-center">Jarak Terhitung</th>
@@ -599,7 +620,7 @@ export function ManageAttendance() {
                           {teacher?.name || "Pegawai"}
                         </div>
                         <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                          ID / NUPTK: {teacher?.nip || "—"}
+                          ID Pegawai / NIP / NIDN / NIK: {teacher?.nip || "—"}
                         </div>
                       </td>
                       <td className="p-3">

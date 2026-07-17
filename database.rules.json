@@ -1,69 +1,110 @@
 {
   "rules": {
-    ".read": "auth != null",
-    ".write": "false",
+    ".read": false,
+    ".write": false,
+
     "users": {
+      ".indexOn": ["username", "role"],
       "$uid": {
         ".read": "auth != null",
         ".write": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('role').val() == 'admin' || root.child('users').child(auth.uid).child('role').val() == 'developer')",
-        ".validate": "newData.hasChildren(['username', 'name', 'role'])",
+        ".validate": "newData.hasChildren(['username', 'name', 'role']) && !newData.hasChild('password')",
         "username": {
-          ".validate": "newData.isString() && newData.val().length < 50"
+          ".validate": "newData.isString() && newData.val().length >= 3 && newData.val().length <= 50"
         },
         "name": {
-          ".validate": "newData.isString() && newData.val().length < 100"
+          ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 100"
         },
         "role": {
-          ".validate": "newData.isString() && (newData.val() == 'admin' || newData.val() == 'developer' || newData.val() == 'kepala_madrasah' || newData.val() == 'guru' || newData.val() == 'staf_sekolah')"
+          ".validate": "newData.isString() && (newData.val() == 'admin' || newData.val() == 'developer' || newData.val() == 'kepala_sekolah' || newData.val() == 'kepala_madrasah' || newData.val() == 'guru' || newData.val() == 'dosen' || newData.val() == 'staf_sekolah' || newData.val() == 'staf_kampus')"
+        },
+        "password": {
+          ".validate": false
         },
         "$other": {
           ".validate": true
         }
       }
     },
+
+    "school": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'admin' || root.child('users').child(auth.uid).child('role').val() == 'developer' || root.child('users').child(auth.uid).child('role').val() == 'kepala_sekolah' || root.child('users').child(auth.uid).child('role').val() == 'kepala_madrasah')"
+    },
+
     "attendance": {
       ".indexOn": ["userId", "date"],
       "$recordId": {
         ".read": "auth != null",
-        ".write": "auth != null && (!data.exists() || data.child('userId').val() == auth.uid || root.child('users').child(auth.uid).child('role').val() == 'admin')",
-        ".validate": "newData.hasChildren(['userId', 'date', 'status', 'timestamp'])",
-        "userId": {
-          ".validate": "newData.isString() && newData.val() == auth.uid"
-        },
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'admin' || root.child('users').child(auth.uid).child('role').val() == 'developer' || root.child('users').child(auth.uid).child('role').val() == 'kepala_madrasah' || !data.exists())",
+        ".validate": "newData.hasChildren(['userId', 'date', 'status'])",
         "status": {
-          ".validate": "newData.isString() && (newData.val() == 'hadir' || newData.val() == 'izin' || newData.val() == 'sakit' || newData.val() == 'alpha')"
+          ".validate": "newData.isString() && (newData.val() == 'Hadir' || newData.val() == 'Terlambat' || newData.val() == 'Izin' || newData.val() == 'Sakit' || newData.val() == 'Alpha')"
         },
         "date": {
           ".validate": "newData.isString() && newData.val().length == 10"
         },
-        "timestamp": {
-          ".validate": "newData.isNumber()"
-        },
         "$other": {
           ".validate": true
         }
       }
     },
+
     "cuti_requests": {
-      ".indexOn": ["userId"],
+      ".indexOn": ["userId", "status"],
       "$requestId": {
         ".read": "auth != null",
         ".write": "auth != null",
-        ".validate": "newData.hasChildren(['userId', 'status'])",
-        "userId": {
-           ".validate": "newData.isString()"
-        },
+        ".validate": "newData.hasChildren(['userId', 'jenis', 'status'])",
         "status": {
-           ".validate": "newData.isString() && (newData.val() == 'pending' || newData.val() == 'approved' || newData.val() == 'rejected')"
+          ".validate": "newData.isString() && (newData.val() == 'Pending' || newData.val() == 'Approved' || newData.val() == 'Rejected')"
         },
         "$other": {
           ".validate": true
         }
       }
     },
-    "school_config": {
-      ".read": "true",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
+
+    "kinerja_records": {
+      ".indexOn": ["userId", "tanggal"],
+      "$recordId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['userId', 'tanggal', 'uraian'])",
+        "$other": {
+          ".validate": true
+        }
+      }
+    },
+
+    "opds": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'admin' || root.child('users').child(auth.uid).child('role').val() == 'developer' || root.child('users').child(auth.uid).child('role').val() == 'kepala_sekolah' || root.child('users').child(auth.uid).child('role').val() == 'kepala_madrasah')"
+    },
+
+    "satuan_kerjas": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'admin' || root.child('users').child(auth.uid).child('role').val() == 'developer' || root.child('users').child(auth.uid).child('role').val() == 'kepala_sekolah' || root.child('users').child(auth.uid).child('role').val() == 'kepala_madrasah')"
+    },
+
+    "jabatans": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'admin' || root.child('users').child(auth.uid).child('role').val() == 'developer' || root.child('users').child(auth.uid).child('role').val() == 'kepala_sekolah' || root.child('users').child(auth.uid).child('role').val() == 'kepala_madrasah')"
+    },
+
+    "academicYears": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'admin' || root.child('users').child(auth.uid).child('role').val() == 'developer' || root.child('users').child(auth.uid).child('role').val() == 'kepala_sekolah' || root.child('users').child(auth.uid).child('role').val() == 'kepala_madrasah')"
+    },
+
+    "holidays": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'admin' || root.child('users').child(auth.uid).child('role').val() == 'developer' || root.child('users').child(auth.uid).child('role').val() == 'kepala_sekolah' || root.child('users').child(auth.uid).child('role').val() == 'kepala_madrasah')"
+    },
+
+    "class_schedules": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'admin' || root.child('users').child(auth.uid).child('role').val() == 'developer' || root.child('users').child(auth.uid).child('role').val() == 'kepala_sekolah' || root.child('users').child(auth.uid).child('role').val() == 'kepala_madrasah')"
     }
   }
 }

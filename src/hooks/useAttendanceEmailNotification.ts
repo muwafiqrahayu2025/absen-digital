@@ -68,8 +68,8 @@ export function useAttendanceEmailNotification() {
         db.setAttendance(updatedAttendance);
 
         const currentUser = JSON.parse(localStorage.getItem('auth_user') || '{}');
-        if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'kepala_madrasah')) {
-          toast.error(`Sistem Otomatis: Email notifikasi absensi telah dikirim ke ${adminEmail}. (Terdapat ${missingTeachers.length} guru/staf Alpha).`, {
+        if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'kepala_sekolah')) {
+          toast.error(`Sistem Otomatis: Email notifikasi absensi telah dikirim ke ${adminEmail}. (Terdapat ${missingTeachers.length} guru/dosen/staf Alpha).`, {
             duration: 8000,
             position: 'bottom-right'
           });

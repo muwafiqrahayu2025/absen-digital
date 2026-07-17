@@ -13,12 +13,13 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         includeAssets: ['logo.png'],
         manifest: {
-          name: 'ABDI Absen Digital',
-          short_name: 'ABDI',
-          description: 'Sistem presensi digital terpadu',
-          theme_color: '#ffffff',
-          background_color: '#ffffff',
+          name: 'ABDI Absen Digital - Multi Online',
+          short_name: 'ABDI Desktop',
+          description: 'Aplikasi Absensi Digital Multi-Online (Pusat & Cabang)',
+          theme_color: '#4f46e5',
+          background_color: '#0f172a',
           display: 'standalone',
+          start_url: '/login',
           icons: [
             {
               src: 'logo.png',
@@ -29,7 +30,8 @@ export default defineConfig(() => {
           ]
         },
         workbox: {
-          maximumFileSizeToCacheInBytes: 3000000 // Memperbesar limit cache hingga 3MB untuk file JS besar
+          maximumFileSizeToCacheInBytes: 3000000, // Memperbesar limit cache hingga 3MB untuk file JS besar
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,json}']
         }
       })
     ],
@@ -40,10 +42,28 @@ export default defineConfig(() => {
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      // Do not modifyâ€”file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+    },
+    build: {
+      sourcemap: false,
+      chunkSizeWarningLimit: 800,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom', 'react-router-dom'],
+            firebase: ['firebase/app', 'firebase/auth', 'firebase/database', 'firebase/storage'],
+            charts: ['recharts'],
+            ui: ['lucide-react', 'react-hot-toast', 'motion'],
+            utils: ['date-fns', 'crypto-js', 'file-saver'],
+            excel: ['xlsx'],
+            scanner: ['html5-qrcode'],
+            ai: ['@google/genai'],
+          },
+        },
+      },
     },
   };
 });

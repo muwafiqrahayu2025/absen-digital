@@ -171,7 +171,7 @@ ${emailFooter}
       case 'ATTENDANCE_RECORDED':
         waMessage = `Halo, *${user.name}*! 👋\n\n`
           + `Absensi kamu hari ini sudah berhasil tercatat di sistem ya. ✅\n\n`
-          + `📍 *Lokasi:* ${data.location || 'Area Madrasah'}\n`
+          + `📍 *Lokasi:* ${data.location || 'Area Instansi / Sekolah / Kampus'}\n`
           + `⏰ *Waktu:* ${currentTime}\n`
           + `📌 *Jenis:* ${data.extraInfo || 'Absen Reguler'}\n\n`
           + `Semangat beraktivitas dan semoga harimu menyenangkan! ✨`
@@ -185,10 +185,10 @@ ${emailFooter}
             </div>
             <div style="padding: 30px 20px;">
               <p style="font-size: 16px; color: #374151; margin-top: 0;">Halo <strong>${user.name}</strong>,</p>
-              <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">Terima kasih sudah melakukan absensi hari ini. Kehadiranmu sangat berarti bagi kemajuan madrasah kita!</p>
+              <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">Terima kasih sudah melakukan absensi hari ini. Kehadiranmu sangat berarti bagi kemajuan instansi / sekolah / kampus kita!</p>
               
               <div style="background-color: #f8fafc; border-radius: 8px; padding: 20px; margin: 25px 0;">
-                <p style="margin: 5px 0; font-size: 14px; color: #64748b;"><strong>📍 Lokasi:</strong> <span style="color: #0f172a;">${data.location || 'Area Madrasah'}</span></p>
+                <p style="margin: 5px 0; font-size: 14px; color: #64748b;"><strong>📍 Lokasi:</strong> <span style="color: #0f172a;">${data.location || 'Area Instansi / Sekolah'}</span></p>
                 <p style="margin: 5px 0; font-size: 14px; color: #64748b;"><strong>⏰ Waktu:</strong> <span style="color: #0f172a;">${currentTime}</span></p>
                 <p style="margin: 5px 0; font-size: 14px; color: #64748b;"><strong>📌 Jenis:</strong> <span style="color: #0f172a;">${data.extraInfo || 'Absen Reguler'}</span></p>
               </div>
@@ -245,7 +245,7 @@ ${emailFooter}
                 <p style="margin: 0; font-size: 14px; color: #0369a1;"><strong>💬 Alasan/Keterangan:</strong><br>${data.location || '-'}</p>
               </div>
               
-              <p style="font-size: 14px; color: #64748b; line-height: 1.6;">Mohon bersabar ya, Kepala Madrasah/Admin akan segera meninjau permohonan Anda. Anda akan menerima notifikasi otomatis ketika statusnya sudah berubah! ⏳</p>
+              <p style="font-size: 14px; color: #64748b; line-height: 1.6;">Mohon bersabar ya, Kepala Sekolah / Rektor / Admin akan segera meninjau permohonan Anda. Anda akan menerima notifikasi otomatis ketika statusnya sudah berubah! ⏳</p>
             </div>
 ${emailFooter}
           </div>
@@ -268,7 +268,7 @@ ${emailFooter}
             </div>
             <div style="padding: 30px 20px;">
               <p style="font-size: 16px; color: #374151; margin-top: 0;">Halo <strong>${user.name}</strong>,</p>
-              <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">Permohonan izin/cuti Anda untuk tanggal <strong>${data.time}</strong> telah selesai ditinjau oleh Admin/Kepala Madrasah.</p>
+              <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">Permohonan izin/cuti Anda untuk tanggal <strong>${data.time}</strong> telah selesai ditinjau oleh Admin / Pimpinan Instansi.</p>
               
               <div style="background-color: ${data.extraInfo === 'approved' ? '#ecfdf5' : '#fef2f2'}; border-radius: 8px; padding: 20px; margin: 25px 0; text-align: center; border: 1px solid ${data.extraInfo === 'approved' ? '#a7f3d0' : '#fecaca'};">
                 <span style="display: inline-block; padding: 8px 16px; border-radius: 20px; background-color: ${data.extraInfo === 'approved' ? '#10b981' : '#ef4444'}; color: white; font-weight: bold; letter-spacing: 1px;">
@@ -345,53 +345,101 @@ ${emailFooter}
       recipient: user.id
     });
 
-    // 2. Kirim WhatsApp via Fonnte API
-    const waToken = eventType === 'OTP_CODE' && school.whatsappApiKeyOtp ? school.whatsappApiKeyOtp : school.whatsappApiKey;
+    // 2. Kirim WhatsApp via WA Gateway (Wablas / Fonnte)
+    const rawToken = eventType === 'OTP_CODE' && school.whatsappApiKeyOtp ? school.whatsappApiKeyOtp : school.whatsappApiKey;
+    const isWablas = school.waGatewayProvider === 'wablas';
     
+    // Bersihkan token (jika dipisah spasi atau koma menjadi format token.secret untuk Wablas)
+    let waToken = rawToken ? rawToken.trim() : "";
+    let wablasSecret = "";
+    if (isWablas && waToken) {
+      const parts = waToken.split(/[\.\s,]+/);
+      if (parts.length > 1) {
+        waToken = `${parts[0]}.${parts[1]}`;
+        wablasSecret = parts[1];
+      }
+    }
+
+    if (eventType === 'OTP_CODE' && data?.extraInfo) {
+      toast.success(`🔐 KODE OTP LOGIN ANDA: [ ${data.extraInfo} ]`, { duration: 30000, icon: '🔑' });
+    }
+
     if (waToken && user.phone) {
       // Pastikan nomor berawalan 62 atau 08
       let phone = user.phone.replace(/\D/g, '');
       if (phone.startsWith('0')) phone = '62' + phone.substring(1);
       
-      const toastWaId = toast.loading(`Mengirim WhatsApp ke ${phone}...`);
-      fetch('https://api.fonnte.com/send', {
+      const toastWaId = eventType !== 'OTP_CODE' ? toast.loading(`Mengirim WhatsApp ke ${phone}...`) : undefined;
+      
+      const fetchUrl = isWablas 
+        ? `${(school.wablasServerUrl || 'https://smg.wablas.com').replace(/\/$/, '')}/api/v2/send-message`
+        : 'https://api.fonnte.com/send';
+      
+      const reqHeaders: Record<string, string> = {
+        'Authorization': waToken
+      };
+      if (isWablas) {
+        reqHeaders['Content-Type'] = 'application/json';
+      }
+
+      const reqBody = isWablas
+        ? JSON.stringify({
+            data: [
+              {
+                phone: phone,
+                message: waMessage,
+                secret: wablasSecret || false
+              }
+            ]
+          })
+        : new URLSearchParams({
+            target: phone,
+            message: waMessage,
+            countryCode: '62'
+          });
+
+      fetch(fetchUrl, {
         method: 'POST',
-        headers: {
-          'Authorization': waToken,
-        },
-        body: new URLSearchParams({
-          target: phone,
-          message: waMessage,
-          countryCode: '62'
-        })
+        headers: reqHeaders,
+        body: reqBody
       }).then(res => res.json())
         .then(res => {
-           if(res.status || res.detail === "success" || res.message === "success") {
-             console.log("Fonnte: WA terkirim ke", user.name);
-             toast.success(`WhatsApp terkirim ke ${user.name}! 📱`, { id: toastWaId });
+           const isSuccess = res.status === true || res.detail === "success" || res.message === "success" || res.message?.toLowerCase().includes("success");
+           if(isSuccess) {
+             console.log("WA Gateway terkirim ke", user.name);
+             if (toastWaId) toast.success(`WhatsApp terkirim ke ${user.name}! 📱`, { id: toastWaId });
            } else {
-             console.error("Fonnte Gagal:", res);
-             toast.error(`WhatsApp Gagal: ${res.reason || res.message || 'Error API'} ❌`, { id: toastWaId });
+             console.error("WA Gateway Gagal:", res);
+             const errMsg = `WhatsApp Gagal: ${res.reason || res.message || 'Perangkat WA Gateway tidak terhubung'} ❌`;
+             if (toastWaId) {
+               toast.error(errMsg, { id: toastWaId });
+             } else {
+               toast.error(errMsg, { duration: 6000 });
+             }
            }
         })
         .catch(err => {
-          console.error("Fonnte API Error:", err);
-          toast.error(`WhatsApp Error: ${err.message || 'Koneksi gagal'} ❌`, { id: toastWaId });
+          console.error("WA Gateway API Error:", err);
+          const errMsg = `WhatsApp Error: ${err.message || 'Koneksi ke API Gateway gagal'} ❌`;
+          if (toastWaId) {
+            toast.error(errMsg, { id: toastWaId });
+          } else {
+            toast.error(errMsg, { duration: 6000 });
+          }
         });
-    } else {
+    } else if (eventType !== 'OTP_CODE') {
       let reasons: string[] = [];
-      if (!waToken) reasons.push("API Key Fonnte belum diisi");
+      if (!waToken) reasons.push("API Key WA Gateway belum diisi");
       if (!user.phone) reasons.push("No. WhatsApp Anda belum diisi di profil");
       toast.error(`WhatsApp tidak dikirim: ${reasons.join(" & ")} ⚠️`, { id: `wa_skip_${eventType}` });
     }
 
     // 3. Kirim Email via Google Apps Script (GAS) Web App
     if (school.gasWebAppUrl && user.email) {
-      const toastEmailId = toast.loading(`Mengirim Email ke ${user.email}...`);
+      const toastEmailId = eventType !== 'OTP_CODE' ? toast.loading(`Mengirim Email ke ${user.email}...`) : undefined;
       fetch(school.gasWebAppUrl, {
         method: 'POST',
         headers: {
-          // Menggunakan text/plain untuk menghindari CORS preflight OPTIONS request yang sering bermasalah di GAS
           'Content-Type': 'text/plain;charset=utf-8' 
         },
         body: JSON.stringify({
@@ -403,18 +451,17 @@ ${emailFooter}
       .then(res => {
          if(res.status === 'success') {
            console.log("GAS: Email terkirim ke", user.email);
-           toast.success(`Email terkirim ke ${user.email}! ✉️`, { id: toastEmailId });
+           if (toastEmailId) toast.success(`Email terkirim ke ${user.email}! ✉️`, { id: toastEmailId });
          } else {
            console.error("GAS Gagal:", res);
-           toast.error(`Email Gagal: ${res.message || 'Cek URL Web App'} ❌`, { id: toastEmailId });
+           if (toastEmailId) toast.error(`Email Gagal: ${res.message || 'Cek URL Web App'} ❌`, { id: toastEmailId });
          }
       })
       .catch(err => {
         console.error("GAS API Error:", err);
-        // Terkadang fetch GAS melempar catch block karena CORS redirect issues meskipun email masuk
-        toast.error(`Email mungkin terkirim, cek inbox. (Info: ${err.message}) ⚠️`, { id: toastEmailId });
+        if (toastEmailId) toast.error(`Email mungkin terkirim, cek inbox. (Info: ${err.message}) ⚠️`, { id: toastEmailId });
       });
-    } else {
+    } else if (eventType !== 'OTP_CODE') {
       let reasons: string[] = [];
       if (!school.gasWebAppUrl) reasons.push("URL Web App Google belum diisi");
       if (!user.email) reasons.push("Alamat Email Anda belum diisi di profil");
@@ -422,7 +469,7 @@ ${emailFooter}
     }
 
     // Fallback UI Notification
-    if (!school.whatsappApiKey && !school.gasWebAppUrl) {
+    if (!school.whatsappApiKey && !school.gasWebAppUrl && eventType !== 'OTP_CODE') {
        toast("🔔 API Notifikasi belum diatur. Pesan disimpan di Log.", { id: `notif_sim_${eventType}` });
     }
 

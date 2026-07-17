@@ -59,11 +59,11 @@ export function ManageHolidays() {
           <div className="bg-[#111c2d] text-white p-5 flex items-center justify-between">
             <div>
               <h3 className="font-extrabold text-white text-base">
-                Tambah Hari Libur / Cuti Bersama Madrasah
+                Tambah Hari Libur / Cuti Bersama Instansi
               </h3>
               <p className="text-[11px] text-slate-300 mt-0.5">
                 Daftarkan penanggalan libur resmi atau hari libur lingkungan
-                Madrasah.
+                Instansi / Sekolah / Kampus.
               </p>
             </div>
             <div className="w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center shrink-0">
@@ -137,7 +137,7 @@ export function ManageHolidays() {
             Daftar Hari Libur & Cuti Bersama Sekolah
           </h2>
           <p className="text-sm text-slate-400 mt-0.5">
-            Kelola kalender libur operasional akademik fungsional Madrasah.
+            Kelola kalender libur operasional akademik dan fungsional instansi / sekolah / kampus.
           </p>
         </div>
         <button
@@ -175,11 +175,13 @@ export function ManageHolidays() {
                       {i + 1}
                     </td>
                     <td className="p-4 font-extrabold text-slate-800">
-                      {new Date(h.date).toLocaleDateString("id-ID", {
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      })}
+                      {/* INC-05 FIX: Avoid UTC off-by-one; split date string directly */}
+                      {(() => {
+                        const [y, m, d] = h.date.split('-').map(Number);
+                        return new Date(y, m - 1, d).toLocaleDateString("id-ID", {
+                          day: "numeric", month: "long", year: "numeric",
+                        });
+                      })()}
                     </td>
                     <td className="p-4 text-slate-500">{h.description}</td>
                     <td className="p-4 text-right">
@@ -216,11 +218,13 @@ export function ManageHolidays() {
                     Sekolah Libur
                   </span>
                   <h4 className="font-extrabold text-[#111c2d] text-sm pt-1">
-                    {new Date(h.date).toLocaleDateString("id-ID", {
-                      day: "numeric",
-                      month: "long",
-                      year: "numeric",
-                    })}
+                    {/* INC-05 FIX: Avoid UTC off-by-one; split date string directly */}
+                    {(() => {
+                      const [y, m, d] = h.date.split('-').map(Number);
+                      return new Date(y, m - 1, d).toLocaleDateString("id-ID", {
+                        day: "numeric", month: "long", year: "numeric",
+                      });
+                    })()}
                   </h4>
                 </div>
                 <button

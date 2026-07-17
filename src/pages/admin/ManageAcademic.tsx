@@ -17,10 +17,12 @@ interface ShiftSchedule {
 
 export function ManageAcademic() {
   const [schedules, setSchedules] = useState<ShiftSchedule[]>(() => {
-    const cached = localStorage.getItem("madrasah_shift_schedules");
+    const cached = localStorage.getItem("instansi_shift_schedules") || localStorage.getItem("madrasah_shift_schedules");
     if (cached) {
       try {
-        return JSON.parse(cached);
+        const parsed = JSON.parse(cached);
+        const list = Array.isArray(parsed) ? parsed : Object.values(parsed);
+        return list.filter((item: any) => item !== null && item !== undefined && typeof item === 'object');
       } catch (e) {}
     }
     return [];
@@ -42,12 +44,12 @@ export function ManageAcademic() {
   });
 
   const saveToStorage = (updated: ShiftSchedule[]) => {
-    localStorage.setItem("madrasah_shift_schedules", JSON.stringify(updated));
+    localStorage.setItem("instansi_shift_schedules", JSON.stringify(updated));
     setSchedules(updated);
   };
 
   const handleDelete = (id: string) => {
-    if (confirm("Yakin ingin menghapus skema jadwal kerja Madrasah ini?")) {
+    if (confirm("Yakin ingin menghapus skema jadwal kerja Instansi/Sekolah ini?")) {
       const updated = schedules.filter((s) => s.id !== id);
       saveToStorage(updated);
       toast.success("Jadwal kerja berhasil dihapus!");
@@ -104,7 +106,7 @@ export function ManageAcademic() {
 
   const toggleActive = (id: string, currentVal: boolean) => {
     const updated = schedules.map((s) =>
-      s.id === id ? { ...s, isActive: !currentVal } : s,
+      s && s.id === id ? { ...s, isActive: !currentVal } : s,
     );
     saveToStorage(updated);
     toast.success("Perubahan status penugasan shift di-update!");
@@ -224,12 +226,12 @@ export function ManageAcademic() {
             <Clock size={22} className="text-indigo-600" />
             {activeTab === "academic"
               ? "Pengaturan Tahun Pelajaran & Semester"
-              : "Pengaturan Jadwal Kerja & Shift Madrasah"}
+              : "Pengaturan Jadwal Kerja & Shift Instansi"}
           </h2>
           <p className="text-sm text-slate-400 mt-0.5">
             {activeTab === "academic"
-              ? "Kelola Tahun Pelajaran aktif dan semester berjalan untuk administrasi rekap absensi madrasah."
-              : "Definisikan jam operasional tapal batas aman clock-in, jam pulang wajib, dan ketentuan hari kerja guru/staf."}
+              ? "Kelola Tahun Pelajaran aktif dan semester berjalan untuk administrasi rekap presensi instansi."
+              : "Definisikan jam operasional tapal batas aman clock-in, jam pulang wajib, dan ketentuan hari kerja pegawai/guru/staf."}
           </p>
         </div>
         <button
