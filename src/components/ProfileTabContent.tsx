@@ -616,7 +616,7 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
                         const defaultLogo = school.logoUrl || "logo.png";
                         setPersonalLogoUrl(defaultLogo);
                         localStorage.removeItem(`qr_embedded_logo_personal_${user?.id}`);
-                        toast.success("Logo dikembalikan ke default.");
+                        toast.success("Logo dikembalikan ke bawaan sistem.");
                       }}
                       className="text-[10px] text-rose-600 hover:underline font-bold cursor-pointer"
                     >

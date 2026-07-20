@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../components/AuthContext";
+import { useEditMode } from '../components/EditModeContext';
+import { useGlobalStore } from '../lib/store';
 import { db } from "../lib/db";
 import { NotificationService } from "../lib/notifications";
 import { EditableText } from "../components/EditableText";
@@ -118,10 +120,11 @@ export function Dashboard() {
     
     if (!hasNotifApi) {
       if (!globalSettingsLoading && globalSettings.wa_fallback_enabled) {
-        setShowWaFallbackModal(true);
+        setWaFallbackMessage(broadcastMessage);
+        setWaFallbackModalOpen(true);
         return;
       }
-      toast("⚠️ API Notifikasi Belum Dikonfigurasi\n\nPesan broadcast tidak dapat dikirim via WhatsApp/Email.", { icon: "🔧", duration: 7000 });
+      toast("⚠️ API Notifikasi Belum Dikonfigurasi\n\nPesan siaran tidak dapat dikirim via WhatsApp/Email.", { icon: "🔧", duration: 7000 });
     }
 
     setBroadcastSending(true);
@@ -132,7 +135,7 @@ export function Dashboard() {
     if (hasNotifApi) {
       toast.success(`Pengumuman berhasil disiarkan ke ${teachers.length} Guru/Staf!`);
     } else {
-      toast.success(`Broadcast in-app terkirim ke ${teachers.length} pengguna.`);
+      toast.success(`Siaran dalam aplikasi terkirim ke ${teachers.length} pengguna.`);
     }
     setBroadcastMessage("");
     setTimeout(() => setBroadcastSending(false), 3000);
@@ -201,7 +204,8 @@ export function Dashboard() {
   const [newSatkerSingkatan, setNewSatkerSingkatan] = useState("");
   const [newSatkerNama, setNewSatkerNama] = useState("");
   const [newSatkerOpd, setNewSatkerOpd] = useState("");
-  const [showWaFallbackModal, setShowWaFallbackModal] = useState(false);
+  
+  const { waFallbackModalOpen, setWaFallbackModalOpen, waFallbackMessage, setWaFallbackMessage } = useGlobalStore();
   
   const { settings: globalSettings, loading: globalSettingsLoading } = useGlobalSettings();
 
@@ -500,7 +504,7 @@ export function Dashboard() {
           <div className="flex-1 w-full">
             <h3 className="font-bold text-blue-900 text-sm mb-1">Siaran Pengumuman Massal (Broadcast)</h3>
             <div className="flex gap-2 w-full">
-              <input type="text" value={broadcastMessage} onChange={(e) => setBroadcastMessage(e.target.value)} placeholder="Ketik pengumuman penting..." className="flex-1 border border-blue-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-100" />
+              <input type="text" value={broadcastMessage} onChange={(e) => setBroadcastMessage(e.target.value)} placeholder="Tulis pengumuman untuk semua guru/staf..." className="flex-1 border border-blue-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-100" />
               {(!db.getSchool().gasWebAppUrl && !db.getSchool().whatsappApiKey && !globalSettingsLoading && globalSettings.wa_fallback_enabled) ? (
                 <button onClick={handleBroadcast} disabled={broadcastSending || !broadcastMessage.trim()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-sm font-bold shadow-md">Kirim via WA Web</button>
               ) : (
@@ -645,7 +649,7 @@ export function Dashboard() {
         )}
         
         {/* MODAL WA FALLBACK BROADCAST */}
-        {showWaFallbackModal && (
+        {waFallbackModalOpen && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4 animate-fade-in backdrop-blur-sm">
             <div className="bg-white rounded-[2rem] max-w-xl w-full p-6 shadow-2xl max-h-[85vh] flex flex-col border border-slate-100">
               <div className="flex justify-between items-center mb-4">
@@ -654,11 +658,11 @@ export function Dashboard() {
                     <Smartphone size={20} />
                   </div>
                   <div>
-                    <h3 className="text-lg font-black text-slate-800">Kirim Broadcast via WA Web</h3>
+                    <h3 className="text-lg font-black text-slate-800">Kirim Siaran via WA Web</h3>
                     <p className="text-xs text-slate-500">Pilih kontak untuk mengirim pesan ini secara manual</p>
                   </div>
                 </div>
-                <button onClick={() => setShowWaFallbackModal(false)} className="p-2 bg-slate-100 text-slate-500 rounded-full hover:bg-slate-200 transition">
+                <button onClick={() => setWaFallbackModalOpen(false)} className="p-2 bg-slate-100 text-slate-500 rounded-full hover:bg-slate-200 transition">
                   <X size={18} />
                 </button>
               </div>
@@ -667,13 +671,13 @@ export function Dashboard() {
                 <AlertTriangle className="shrink-0 text-amber-500 mt-0.5" size={16} />
                 <div>
                   <strong className="block mb-0.5">Kirim Massal Terbatas</strong>
-                  Tip: Gunakan API WhatsApp Gateway pada pengaturan Dasbor Pengembang untuk mengirim pesan massal secara otomatis di latar belakang tanpa perlu klik satu per satu.
+                  Tip: Gunakan API WhatsApp Gateway pada pengaturan Konsol Pengembang untuk mengirim pesan massal secara otomatis di latar belakang tanpa perlu klik satu per satu.
                 </div>
               </div>
               
               <div className="bg-slate-50 p-3 rounded-xl mb-4 border border-slate-200">
                 <div className="text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Isi Pesan:</div>
-                <div className="text-sm font-medium text-slate-800 whitespace-pre-wrap">{broadcastMessage}</div>
+                <div className="text-sm font-medium text-slate-800 whitespace-pre-wrap">{waFallbackMessage}</div>
               </div>
 
               <div className="flex-1 overflow-y-auto min-h-0 space-y-2 pr-2 custom-scrollbar">
@@ -683,8 +687,7 @@ export function Dashboard() {
                   if (phoneNumber.startsWith('+')) phoneNumber = phoneNumber.substring(1);
                   
                   const isWaValid = phoneNumber && phoneNumber.length > 8;
-                  // Encode message. We append some standard broadcast text.
-                  const finalMsg = encodeURIComponent(`*PENGUMUMAN INSTITUSI*\n\nHalo ${usr.name},\n\n${broadcastMessage}\n\n_Pesan otomatis dari Sistem Kepegawaian_`);
+                  const finalMsg = encodeURIComponent(`*PENGUMUMAN INSTITUSI*\n\nHalo ${usr.name},\n\n${waFallbackMessage}\n\n_Pesan otomatis dari Sistem Kepegawaian_`);
                   const waLink = `https://wa.me/${phoneNumber}?text=${finalMsg}`;
                   
                   return (
@@ -715,7 +718,7 @@ export function Dashboard() {
               
               <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
                 <button 
-                  onClick={() => setShowWaFallbackModal(false)}
+                  onClick={() => setWaFallbackModalOpen(false)}
                   className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-sm font-bold transition"
                 >
                   Selesai

@@ -436,7 +436,7 @@ export function Login() {
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Username"
+                  placeholder="Nama Pengguna"
                   className="w-full h-12 rounded-full border border-gray-200 px-6 text-sm outline-none focus:border-[#8C43F6] focus:ring-1 focus:ring-[#8C43F6] transition-all text-gray-700 bg-gray-50/50 hover:bg-gray-50 focus:bg-white"
                 />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 pointer-events-none">
@@ -455,7 +455,7 @@ export function Login() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Password"
+                  placeholder="Kata Sandi"
                   className="w-full h-12 rounded-full border border-gray-200 px-6 pr-12 text-sm outline-none focus:border-[#8C43F6] focus:ring-1 focus:ring-[#8C43F6] transition-all text-gray-700 bg-gray-50/50 hover:bg-gray-50 focus:bg-white tracking-widest"
                 />
                 <button

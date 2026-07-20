@@ -24,7 +24,7 @@ export function Register() {
     }
 
     if (password.length < 6) {
-      toast.error("Password minimal 6 karakter (syarat Firebase)");
+      toast.error("Kata sandi minimal 6 karakter");
       return;
     }
 
@@ -154,7 +154,7 @@ export function Register() {
               required
               value={adminUsername}
               onChange={(e) => setAdminUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
-              placeholder="Username Admin"
+              placeholder="Nama Pengguna Admin"
               className="w-full h-12 rounded-xl border border-slate-200 px-11 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-slate-700 bg-slate-50/50"
             />
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold group-focus-within:text-indigo-500 transition-colors">@</span>
@@ -204,7 +204,7 @@ export function Register() {
           <p className="text-slate-500 text-sm font-medium">
             Sudah mendaftarkan instansi?{" "}
             <Link to="/login" className="text-indigo-600 font-bold hover:text-indigo-700 hover:underline transition-all">
-              Login di sini
+              Masuk di sini
             </Link>
           </p>
         </div>

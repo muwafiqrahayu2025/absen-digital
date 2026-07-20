@@ -471,7 +471,7 @@ export function Profile() {
                 {/* Info Text Universal */}
                 <div className="text-center max-w-sm px-2">
                   <h4 className="font-extrabold text-slate-800 dark:text-white text-sm mb-1">
-                    Pas Foto Resmi ({user?.role === 'developer' ? 'SaaS Developer' : user?.role === 'kepala_sekolah' ? 'Kepala Sekolah / Rektor' : user?.role === 'admin' ? 'Administrator' : 'Guru / Dosen / Staf'})
+                    Pas Foto Resmi ({user?.role === 'developer' ? 'Pengembang Konsol' : user?.role === 'kepala_sekolah' ? 'Kepala Sekolah / Rektor' : user?.role === 'admin' ? 'Administrator' : 'Guru / Dosen / Staf'})
                   </h4>
                   <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                     Unggah pas foto formal atau foto profil profesional Anda. Foto ini akan ditampilkan pada biodata, kartu identitas QR, dan laporan resmi sistem.

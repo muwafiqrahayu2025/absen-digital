@@ -780,7 +780,7 @@ export function ManageAttendance() {
                       <td className="p-3 font-semibold text-slate-600">
                         {record.method === "scanner"
                           ? "📸 Scan GPS Kamera"
-                          : "🖼️ Unduh Berkas"}
+                          : "🖼️ Unggah Dokumen"}
                       </td>
                       <td className="p-3 text-center">
                         {record.distance !== undefined ? (

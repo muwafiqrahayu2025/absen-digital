@@ -114,14 +114,14 @@ export function DeviceRegistrationModal() {
             <ShieldCheck className="w-8 h-8 text-white" />
           </div>
           <h2 className="text-xl font-black tracking-tight">Registrasi Awal Perangkat</h2>
-          <p className="text-xs text-indigo-100 mt-1">Aktivasi Offline-First Zero-Dependency</p>
+          <p className="text-xs text-indigo-100 mt-1">Aktivasi Mode Offline-First Mandiri</p>
         </div>
 
         <form onSubmit={handleRegister} className="p-6 space-y-4">
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-start gap-3 text-amber-800 text-xs">
             <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
             <div>
-              <span className="font-bold block">Perangkat Belum Teregistrasi (Clean Slate)</span>
+              <span className="font-bold block">Perangkat Belum Teregistrasi (Data Kosong)</span>
               Sesuai arsitektur ABDI Absen Digital, registrasi awal dilakukan 1x dalam kondisi online untuk mengunduh Master Data ke penyimpanan lokal AES-256.
             </div>
           </div>

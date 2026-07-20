@@ -467,7 +467,7 @@ export function Layout() {
       group: "PLATFORM & SISTEM",
       items: [
         { to: "/admin/tenants", icon: <Building size={17} />, label: "Daftar Tenant" },
-        { to: "/admin/developer", icon: <Terminal size={17} />, label: "Developer Console" },
+        { to: "/admin/developer", icon: <Terminal size={17} />, label: "Konsol Pengembang" },
         { to: "/admin/school", icon: <Settings size={17} />, label: "Konfigurasi Sistem" },
       ],
     },
@@ -597,7 +597,7 @@ export function Layout() {
             {user?.role === "developer" && (
               <div className="mb-2 flex items-center justify-center gap-1.5 px-2 py-1 rounded-lg bg-amber-400/20 border border-amber-400/30">
                 <Terminal size={11} className="text-amber-300 shrink-0" />
-                <span className="text-[9px] font-black text-amber-300 tracking-widest uppercase">Dev Mode</span>
+                <span className="text-[9px] font-black text-amber-300 tracking-widest uppercase">Mode Pengembang</span>
               </div>
             )}
             <div className="bg-white/12 backdrop-blur-sm rounded-xl p-2.5 flex items-center gap-2.5 border border-white/15">
@@ -741,7 +741,7 @@ export function Layout() {
                   }
                 }}
                 className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-50 border border-amber-300 text-amber-800 text-[10px] font-bold animate-pulse cursor-pointer hover:bg-amber-100 transition"
-                title={!isOnline ? "Offline Mode" : `Klik untuk sinkronisasi ${pendingQueueCount} antrean`}
+                title={!isOnline ? "Mode Offline" : `Klik untuk sinkronisasi ${pendingQueueCount} antrean`}
               >
                 <WifiOff size={11} className="shrink-0 text-amber-600" />
                 <span className="hidden sm:inline">{!isOnline ? "Offline" : `Antrean (${pendingQueueCount})`}</span>

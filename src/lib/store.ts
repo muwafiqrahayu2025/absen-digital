@@ -5,6 +5,10 @@ interface GlobalState {
   setOfflineMode: (offline: boolean) => void;
   faceRecognitionEnabled: boolean;
   setFaceRecognition: (enabled: boolean) => void;
+  waFallbackModalOpen: boolean;
+  setWaFallbackModalOpen: (open: boolean) => void;
+  waFallbackMessage: string;
+  setWaFallbackMessage: (msg: string) => void;
 }
 
 export const useGlobalStore = create<GlobalState>((set) => ({
@@ -12,4 +16,8 @@ export const useGlobalStore = create<GlobalState>((set) => ({
   setOfflineMode: (offline) => set({ isOfflineMode: offline }),
   faceRecognitionEnabled: true,
   setFaceRecognition: (enabled) => set({ faceRecognitionEnabled: enabled }),
+  waFallbackModalOpen: false,
+  setWaFallbackModalOpen: (open) => set({ waFallbackModalOpen: open }),
+  waFallbackMessage: "",
+  setWaFallbackMessage: (msg) => set({ waFallbackMessage: msg }),
 }));

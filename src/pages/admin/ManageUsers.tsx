@@ -466,7 +466,7 @@ export function ManageUsers() {
                             {u.name}
                           </div>
                           <div className="text-[10px] text-slate-400 font-mono mt-0.5 capitalize">
-                            {u.role.replace("_", " ")}
+                            {u.role === 'developer' ? 'Pengembang Konsol' : u.role.replace("_", " ")}
                           </div>
                         </div>
                       </td>
@@ -492,7 +492,7 @@ export function ManageUsers() {
                             )}
                             {u.mapelSertifikasi && (
                               <span className="bg-emerald-50 text-emerald-850 text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-150">
-                                🏅 Cert: {u.mapelSertifikasi}
+                                🏅 Sertifikasi: {u.mapelSertifikasi}
                               </span>
                             )}
                           </div>
