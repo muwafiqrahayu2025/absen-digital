@@ -7,21 +7,28 @@ import toast from "react-hot-toast";
 import { QRCodeSVG } from "qrcode.react";
 import { EditableText } from "../../components/EditableText";
 import { useAuth } from "../../components/AuthContext";
+import { useFirebaseData } from "../../hooks/useFirebaseData";
+import { dbRealtime, getTenantRef } from "../../lib/firebase";
+import { ref, set, remove } from "firebase/database";
 
 export function ManageUsers() {
   const { user: currentUser } = useAuth();
   const [searchParams] = useSearchParams();
   const activeTab = searchParams.get("tab") || "pegawai";
   const roleFilter = searchParams.get("role");
-  const school = db.getSchool();
-  const yayasanName = "YAYASAN " + (school.name || "AL-HIDAYAH").replace(/^(mts\.|smp|sma|ma|sd|mi)\s+/i, "").toUpperCase();
+  const { data: usersData, loading: usersLoading, isOffline } = useFirebaseData('users');
+  const { data: opdsData } = useFirebaseData('opds');
+  const { data: satkersData } = useFirebaseData('satuanKerjas');
+  const { data: jabatansData } = useFirebaseData('jabatans');
+  const { data: schoolData } = useFirebaseData('school');
 
-  const [users, setUsers] = useState<User[]>(() => db.getUsers());
-  const [opds, setOpds] = useState<OPD[]>(() => db.getOPDs());
-  const [satuanKerjas, setSatuanKerjas] = useState<SatuanKerja[]>(() =>
-    db.getSatuanKerjas(),
-  );
-  const [jabatans, setJabatans] = useState<Jabatan[]>(() => db.getJabatans());
+  const users = React.useMemo(() => Array.isArray(usersData) ? usersData : Object.values(usersData || {}), [usersData]) as User[];
+  const opds = React.useMemo(() => Array.isArray(opdsData) ? opdsData : Object.values(opdsData || {}), [opdsData]) as OPD[];
+  const satuanKerjas = React.useMemo(() => Array.isArray(satkersData) ? satkersData : Object.values(satkersData || {}), [satkersData]) as SatuanKerja[];
+  const jabatans = React.useMemo(() => Array.isArray(jabatansData) ? jabatansData : Object.values(jabatansData || {}), [jabatansData]) as Jabatan[];
+
+  const school = schoolData || db.getSchool();
+  const yayasanName = "YAYASAN " + (school.name || "AL-HIDAYAH").replace(/^(mts\.|smp|sma|ma|sd|mi)\s+/i, "").toUpperCase();
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState("");
@@ -49,7 +56,7 @@ export function ManageUsers() {
     nip: "",
     phone: "",
     email: "",
-    opd: "Dinas / Yayasan / Rektorat",
+    opd: "-",
     satuanKerja: "",
     jabatan: "",
     mapelUtama: "",
@@ -73,51 +80,39 @@ export function ManageUsers() {
     nama: "",
   });
 
-  // Keep state synced with localStorage
-  useEffect(() => {
-    setUsers(db.getUsers());
-    setOpds(db.getOPDs());
-    setSatuanKerjas(db.getSatuanKerjas());
-    setJabatans(db.getJabatans());
-  }, [activeTab]);
-
   // Handle Deletions
-  const handleDeleteUser = (id: string) => {
+  const handleDeleteUser = async (id: string) => {
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menghapus saat offline."); return; }
     if (confirm("Yakin ingin menghapus data pegawai ini dari portal presensi?")) {
-      const updated = users.filter((u) => u.id !== id);
-      db.setUsers(updated);
-      setUsers(updated);
+      await remove(getTenantRef(`users/${id}`));
       toast.success("Pegawai berhasil dihapus");
     }
   };
 
-  const handleDeleteOpd = (id: string) => {
+  const handleDeleteOpd = async (id: string) => {
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menghapus saat offline."); return; }
     if (
       confirm(
         "Yakin ingin menghapus Yayasan ini? Semua unit di bawahnya mungkin terpengaruh.",
       )
     ) {
-      const updated = opds.filter((o) => o.id !== id);
-      db.setOPDs(updated);
-      setOpds(updated);
+      await remove(getTenantRef(`opds/${id}`));
       toast.success("Yayasan berhasil dihapus");
     }
   };
 
-  const handleDeleteSatker = (id: string) => {
+  const handleDeleteSatker = async (id: string) => {
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menghapus saat offline."); return; }
     if (confirm("Yakin ingin menghapus Satuan Kerja ini?")) {
-      const updated = satuanKerjas.filter((s) => s.id !== id);
-      db.setSatuanKerjas(updated);
-      setSatuanKerjas(updated);
+      await remove(getTenantRef(`satuanKerjas/${id}`));
       toast.success("Satuan Kerja berhasil dihapus");
     }
   };
 
-  const handleDeleteJabatan = (id: string) => {
+  const handleDeleteJabatan = async (id: string) => {
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menghapus saat offline."); return; }
     if (confirm("Yakin ingin menghapus formasi Jabatan ini?")) {
-      const updated = jabatans.filter((j) => j.id !== id);
-      db.setJabatans(updated);
-      setJabatans(updated);
+      await remove(getTenantRef(`jabatans/${id}`));
       toast.success("Jabatan berhasil dihapus");
     }
   };
@@ -133,7 +128,7 @@ export function ManageUsers() {
       nip: "",
       phone: "",
       email: "",
-      opd: opds[0]?.singkatan || "Dinas / Yayasan / Rektorat",
+      opd: opds[0]?.singkatan || "-",
       satuanKerja: satuanKerjas[0]?.nama || "",
       jabatan: jabatans[0]?.nama || "",
       mapelUtama: "",
@@ -171,7 +166,7 @@ export function ManageUsers() {
       nip: u.nip || "",
       phone: u.phone || "",
       email: u.email || "",
-      opd: u.opd || "Dinas / Yayasan / Rektorat",
+      opd: u.opd || "-",
       satuanKerja:
         u.satuanKerja ||
         "Instansi / Sekolah / Kampus",
@@ -212,83 +207,54 @@ export function ManageUsers() {
   };
 
   // Save Handlers
-  const handleUserSave = (e: React.FormEvent) => {
+  const handleUserSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    let updated: User[] = [];
-    if (editingUser) {
-      updated = users.map((u) =>
-        u.id === editingUser.id ? { ...u, ...userForm } : u,
-      );
-      toast.success("Pembaruan data pegawai berhasil disimpan!");
-    } else {
-      const newUser: User = {
-        id: Math.random().toString(36).substring(2, 9),
-        ...userForm,
-      };
-      updated = [...users, newUser];
-      toast.success("Guru/Staf baru berhasil didaftarkan!");
-    }
-    db.setUsers(updated);
-    setUsers(updated);
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
+    const id = editingUser ? editingUser.id : Math.random().toString(36).substring(2, 9);
+    const updatedUser = { ...userForm, id };
+    await set(getTenantRef(`users/${id}`), updatedUser);
+    toast.success(editingUser ? "Pembaruan data pegawai berhasil disimpan!" : "Guru/Staf baru berhasil didaftarkan!");
     setIsUserModalOpen(false);
   };
 
-  const handleOpdSave = (e: React.FormEvent) => {
+  const handleOpdSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    let updated: OPD[] = [];
-    // BUG-02 FIX: Use opdForm.singkatan for singkatan field, not opdForm.nama
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
     const singkatan = (opdForm.singkatan || opdForm.nama).toUpperCase();
     const nama = opdForm.nama.toUpperCase();
-    if (editingOpd) {
-      updated = opds.map((o) =>
-        o.id === editingOpd.id
-          ? { ...o, singkatan, nama }
-          : o,
-      );
-      toast.success("OPD berhasil diubah");
-    } else {
-      const newItem: OPD = {
-        id: String(Date.now()),
-        singkatan,
-        nama,
-      };
-      updated = [...opds, newItem];
-      toast.success("OPD Baru berhasil ditambahkan");
+    const id = editingOpd ? editingOpd.id : String(Date.now());
+    const updatedOpd = { id, singkatan, nama };
+    
+    const dbPath = `opds/${id}`;
+    const fullRef = getTenantRef(dbPath);
+    console.log("=== DEBUG YAYASAN/OPD SAVE ===");
+    console.log("PATH REF: ", fullRef.toString());
+    console.log("TENANT ID: ", localStorage.getItem("abdi_active_tenant_id"));
+    console.log("PAYLOAD: ", updatedOpd);
+
+    try {
+      await set(fullRef, updatedOpd);
+      toast.success(editingOpd ? "OPD berhasil diubah" : "OPD Baru berhasil ditambahkan");
+      setIsOpdModalOpen(false);
+    } catch (error: any) {
+      console.error("FIREBASE ERROR ON SAVE OPD:", error);
+      toast.error(`Akses Ditolak! Path: ${dbPath}`);
     }
-    db.setOPDs(updated);
-    setOpds(updated);
-    setIsOpdModalOpen(false);
   };
 
-  const handleSatkerSave = (e: React.FormEvent) => {
+  const handleSatkerSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    let updated: SatuanKerja[] = [];
-    // BUG-02 FIX: Use satkerForm.singkatan for singkatan field, not satkerForm.nama
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
     const singkatan = (satkerForm.singkatan || satkerForm.nama).toUpperCase();
     const nama = satkerForm.nama.toUpperCase();
-    if (editingSatker) {
-      updated = satuanKerjas.map((s) =>
-        s.id === editingSatker.id
-          ? { ...s, singkatan, nama, opdId: satkerForm.opdId }
-          : s,
-      );
-      toast.success("Satuan Kerja berhasil diubah");
-    } else {
-      const newItem: SatuanKerja = {
-        id: String(Date.now()),
-        singkatan,
-        nama,
-        opdId: satkerForm.opdId,
-      };
-      updated = [...satuanKerjas, newItem];
-      toast.success("Satuan Kerja baru didaftarkan");
-    }
-    db.setSatuanKerjas(updated);
-    setSatuanKerjas(updated);
+    const id = editingSatker ? editingSatker.id : String(Date.now());
+    const updatedSatker = { id, singkatan, nama, opdId: satkerForm.opdId };
+    await set(getTenantRef(`satuanKerjas/${id}`), updatedSatker);
+    toast.success(editingSatker ? "Satuan Kerja berhasil diubah" : "Satuan Kerja baru didaftarkan");
     setIsSatkerModalOpen(false);
 
     // Otomatis ganti nama Instansi Utama (SMA / SMP / Kampus Unggulan Nusantara) ketika user menginput data di satuan kerja
-    const currentSchool = db.getSchool();
+    const currentSchool = school;
     if (currentSchool) {
       const isDefaultSchoolName =
         currentSchool.name === "SMA / SMP / Kampus Unggulan Nusantara" ||
@@ -305,9 +271,7 @@ export function ManageUsers() {
             nama_instansi: nama,
           }
         };
-        db.setSchool(updatedSchool);
-        window.dispatchEvent(new Event("school_updated"));
-        window.dispatchEvent(new Event("firebase_sync_updated"));
+        await set(getTenantRef('school'), updatedSchool);
         if (isDefaultSchoolName) {
           toast.success(`🎉 Nama Instansi & Kop Surat otomatis diganti menjadi: ${nama}`, { duration: 4500 });
         }
@@ -315,25 +279,14 @@ export function ManageUsers() {
     }
   };
 
-  const handleJabatanSave = (e: React.FormEvent) => {
+  const handleJabatanSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    let updated: Jabatan[] = [];
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
     const finalNama = jabForm.kategori === "Lainnya" ? jabForm.nama : `${jabForm.kategori} ${jabForm.keterangan}`.trim();
-    if (editingJabatan) {
-      updated = jabatans.map((j) =>
-        j.id === editingJabatan.id ? { ...j, nama: finalNama } : j,
-      );
-      toast.success("Formasi Jabatan berhasil diubah");
-    } else {
-      const newItem: Jabatan = {
-        id: String(Date.now()),
-        nama: finalNama,
-      };
-      updated = [...jabatans, newItem];
-      toast.success("Formasi Jabatan baru ditambahkan");
-    }
-    db.setJabatans(updated);
-    setJabatans(updated);
+    const id = editingJabatan ? editingJabatan.id : String(Date.now());
+    const updatedJabatan = { id, nama: finalNama };
+    await set(getTenantRef(`jabatans/${id}`), updatedJabatan);
+    toast.success(editingJabatan ? "Formasi Jabatan berhasil diubah" : "Formasi Jabatan baru ditambahkan");
     setIsJabatanModalOpen(false);
   };
 
@@ -409,10 +362,8 @@ export function ManageUsers() {
           className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
         >
           <Plus size={16} />
-          {activeTab === "pegawai" && <EditableText originalText="Tambah Pegawai / Guru" />}
-          {activeTab === "opd" && <EditableText originalText="Tambah Lembaga" />}
-          {activeTab === "satker" && <EditableText originalText="Tambah Satuan Kerja" />}
-          {activeTab === "jabatan" && <EditableText originalText="Tambah Jabatan" />}
+          {/* UBAHAN: TOMBOL DIUBAH MENJADI "Tambah Data" */}
+          <EditableText originalText="Tambah Data" />
         </button>
       </div>
 
@@ -433,6 +384,24 @@ export function ManageUsers() {
         </div>
       </div>
 
+      {isOffline && (
+        <div className="bg-amber-100 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-center gap-3">
+          <div className="shrink-0">
+            <svg className="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div>
+            <p className="font-bold text-sm">Mode Luring (Offline) Aktif</p>
+            <p className="text-xs mt-0.5">Koneksi terputus. Pengelolaan Data Master membutuhkan koneksi internet aktif. Form CRUD telah dikunci.</p>
+          </div>
+        </div>
+      )}
+
+      {usersLoading ? (
+         <div className="flex justify-center p-8 text-slate-400 font-medium">Memuat data...</div>
+      ) : (
+      <>
       {/* RENDER TABLE ACCORDING TO THE ACTIVE TAB SELECTION */}
 
       {/* 1. PEGAWAI TAB VIEW */}
@@ -495,7 +464,7 @@ export function ManageUsers() {
                         {u.nip || "—"}
                       </td>
                       <td className="p-4 font-bold text-slate-800">
-                        {u.opd || "Dinas / Yayasan / Rektorat"}
+                        {u.opd || "-"}
                       </td>
                       <td className="p-4 text-slate-500 text-[11px] max-w-xs truncate">
                         {u.satuanKerja || "—"}
@@ -730,7 +699,7 @@ export function ManageUsers() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-md w-full max-h-[90vh] flex flex-col shadow-xl border border-slate-100 overflow-hidden relative">
             {/* Close Button X */}
-            <button 
+            <button
               onClick={() => setIsUserModalOpen(false)}
               className="absolute top-4 right-4 p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors z-10"
             >
@@ -742,7 +711,7 @@ export function ManageUsers() {
                 {editingUser ? "Edit Personel" : "Tambah Guru & Staf Baru"}
               </h3>
             </div>
-            
+
             <form
               onSubmit={handleUserSave}
               className="flex flex-col flex-1 min-h-0"
@@ -791,7 +760,7 @@ export function ManageUsers() {
                     />
                   </div>
                   <div>
-                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
                       Password Sesi
                     </label>
                     {/* UX-06 FIX: type="password" so plaintext isn't visible */}
@@ -866,7 +835,7 @@ export function ManageUsers() {
                   </select>
                 </div>
 
-                  <div>
+                <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
                     Akses Portal / Role
                   </label>
@@ -948,7 +917,7 @@ export function ManageUsers() {
       {isOpdModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-slate-100 relative">
-            <button 
+            <button
               onClick={() => setIsOpdModalOpen(false)}
               className="absolute top-4 right-4 p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors"
             >
@@ -1000,7 +969,7 @@ export function ManageUsers() {
       {isSatkerModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-slate-100 relative">
-            <button 
+            <button
               onClick={() => setIsSatkerModalOpen(false)}
               className="absolute top-4 right-4 p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors"
             >
@@ -1070,7 +1039,7 @@ export function ManageUsers() {
       {isJabatanModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-slate-100 relative">
-            <button 
+            <button
               onClick={() => setIsJabatanModalOpen(false)}
               className="absolute top-4 right-4 p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors"
             >
@@ -1147,7 +1116,7 @@ export function ManageUsers() {
       {selectedUserForQR && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 no-print">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-slate-100 relative">
-            <button 
+            <button
               onClick={() => setSelectedUserForQR(null)}
               className="absolute top-4 right-4 p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors"
             >
@@ -1156,7 +1125,7 @@ export function ManageUsers() {
             <h3 className="text-lg font-black text-slate-800 mb-6 pr-8 text-center sm:text-left">
               Kartu Presensi QR Guru & Staf
             </h3>
-            
+
             <div className="flex flex-col items-center gap-6">
               {/* Visual ID Card Face */}
               <div
@@ -1169,11 +1138,11 @@ export function ManageUsers() {
 
                 {/* Card Header */}
                 <div className="flex gap-2 items-center border-b border-white/10 pb-2 shrink-0">
-                  <img 
-                    src={school.logoUrl || "/logo.png"} 
-                    alt="Logo" 
-                    className="w-8 h-8 object-contain shrink-0" 
-                    onError={(e) => { e.currentTarget.src = "https://cdn-icons-png.flaticon.com/512/3135/3135715.png" }} 
+                  <img
+                    src={school.logoUrl || "/logo.png"}
+                    alt="Logo"
+                    className="w-8 h-8 object-contain shrink-0"
+                    onError={(e) => { e.currentTarget.src = "https://cdn-icons-png.flaticon.com/512/3135/3135715.png" }}
                   />
                   <div className="text-left">
                     <h5 className="text-[10px] font-black tracking-tight leading-tight uppercase">{yayasanName}</h5>
@@ -1247,7 +1216,7 @@ export function ManageUsers() {
                 </button>
               </div>
             </div>
-            
+
             <style>
               {`
                 @media print {
@@ -1273,6 +1242,8 @@ export function ManageUsers() {
             </style>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

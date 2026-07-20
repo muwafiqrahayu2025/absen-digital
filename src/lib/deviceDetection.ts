@@ -1,6 +1,6 @@
 import { DeviceInfo, DeviceSessionLog } from "../types";
 import { db } from "./db";
-import { dbRealtime } from "./firebase";
+import { dbRealtime, getTenantRef } from "./firebase";
 import { ref, push, set } from "firebase/database";
 
 /**
@@ -129,7 +129,7 @@ export function recordDeviceSessionLog(
     // 2. Sinkronisasi asinkron ke Firebase jika tersambung (tanpa melempar error jika offline)
     setTimeout(() => {
       try {
-        const logRef = push(ref(dbRealtime, "deviceSessionLogs"));
+        const logRef = push(getTenantRef("deviceSessionLogs"));
         set(logRef, newLog).catch(() => {});
       } catch (err) {}
     }, 100);

@@ -1,11 +1,14 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
+import toast from "react-hot-toast";
 import { AuthProvider, useAuth } from "./components/AuthContext";
 import { ThemeProvider } from "./components/ThemeContext";
 import { EditModeProvider } from "./components/EditModeContext";
 import { Layout } from "./components/Layout";
 import { Login } from "./pages/Login";
+import { ForgotPassword } from "./pages/ForgotPassword";
+import { Register } from "./pages/Register";
 import { Dashboard } from "./pages/Dashboard";
 import { Profile } from "./pages/Profile";
 import { ManageUsers } from "./pages/admin/ManageUsers";
@@ -21,6 +24,7 @@ import { PrincipalAttendanceRecaps } from "./pages/principal/PrincipalAttendance
 import { PrintRecap } from "./pages/principal/PrintRecap";
 import { SchoolScanner } from "./pages/admin/SchoolScanner";
 import { DeveloperConsole } from "./pages/admin/DeveloperConsole";
+import { ManageTenants } from "./pages/admin/ManageTenants";
 import { FloatingEditTools } from "./components/FloatingEditTools";
 import { LandingPage } from "./pages/LandingPage";
 import { DeviceRegistrationModal } from "./components/DeviceRegistrationModal";
@@ -95,18 +99,55 @@ export default function App() {
 
   React.useEffect(() => {
     // Simulasi deteksi Root/Jailbreak terenkripsi
-    // Di aplikasi production native, integrasikan '@awesome-cordova-plugins/root-check'
     const checkRoot = async () => {
-      // const isDeviceRooted = await RootCheck.isDeviceRooted();
-      const isDeviceRooted = false; // Ubah ke true untuk mensimulasikan pemblokiran perangkat root
-      if (isDeviceRooted) {
-        setIsRooted(true);
-      }
+      const isDeviceRooted = false;
+      if (isDeviceRooted) setIsRooted(true);
     };
     checkRoot();
 
+    // ── PWA Install Prompt (beforeinstallprompt) ──────────────────────
+    // Simpan event di window agar bisa dipanggil dari komponen manapun
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      (window as any).__pwaInstallPrompt = e;
+
+      // Hanya tampilkan banner di perangkat mobile
+      const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const dismissed = sessionStorage.getItem('pwa_banner_dismissed');
+      if (isMobile && !dismissed) {
+        setTimeout(() => {
+          toast(
+            (t) => (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '20px' }}>📲</span>
+                <div>
+                  <p style={{ fontWeight: 800, fontSize: '12px', margin: 0 }}>Install Aplikasi ABDI</p>
+                  <p style={{ fontSize: '10px', color: '#666', margin: 0 }}>Tambahkan ke layar utama untuk akses cepat</p>
+                </div>
+                <button
+                  onClick={() => {
+                    const prompt = (window as any).__pwaInstallPrompt;
+                    if (prompt) { prompt.prompt(); }
+                    toast.dismiss(t.id);
+                    sessionStorage.setItem('pwa_banner_dismissed', '1');
+                  }}
+                  style={{ background: '#4f46e5', color: 'white', border: 'none', borderRadius: '8px', padding: '6px 12px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  Install
+                </button>
+              </div>
+            ),
+            { duration: 12000, id: 'pwa-install-banner' }
+          );
+        }, 3000);
+      }
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+
     const cleanupSync = initializeFirebaseSync();
     return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
       if (typeof cleanupSync === 'function') cleanupSync();
     };
   }, []);
@@ -136,6 +177,8 @@ export default function App() {
             <Toaster position="top-right" />
             <Routes>
               <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+              <Route path="/forgot-password" element={<PublicOnlyRoute><ForgotPassword /></PublicOnlyRoute>} />
+              <Route path="/register" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
               <Route path="/landing" element={<PublicOnlyRoute><LandingPage /></PublicOnlyRoute>} />
               <Route path="/home" element={<PublicOnlyRoute><LandingPage /></PublicOnlyRoute>} />
               <Route path="/live-qr" element={<LiveQRView />} />
@@ -249,6 +292,14 @@ export default function App() {
                   element={
                     <ProtectedRoute allowedRoles={["developer"]}>
                       <DeveloperConsole />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="admin/tenants"
+                  element={
+                    <ProtectedRoute allowedRoles={["developer"]}>
+                      <ManageTenants />
                     </ProtectedRoute>
                   }
                 />

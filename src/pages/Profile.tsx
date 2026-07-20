@@ -113,7 +113,7 @@ export function Profile() {
   const [formData, setFormData] = useState({
     name: user?.name || "",
     nip: user?.nip || "",
-    opd: user?.opd || "DINAS / YAYASAN / INSTANSI",
+    opd: user?.opd || "-",
     satker: user?.satuanKerja || user?.satker || school?.name || "Nama Sekolah / Kampus",
     jabatan: user?.jabatan || "Guru / Dosen / Staf Utama",
     gender: user?.gender || "Laki-laki",
@@ -211,7 +211,7 @@ export function Profile() {
           <div className="w-full border-t border-gray-200 mt-5 pt-4 space-y-2.5 text-left text-[11px] text-gray-500 font-medium">
             <div className="flex items-center gap-2">
               <Building size={14} className="text-gray-500 shrink-0" />
-              <span className="truncate">{user?.opd || "DINAS / YAYASAN / INSTANSI"}</span>
+              <span className="truncate">{user?.opd || "-"}</span>
             </div>
             <div className="flex items-center gap-2">
               <Award size={14} className="text-gray-500 shrink-0" />

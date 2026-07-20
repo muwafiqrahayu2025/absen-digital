@@ -1,32 +1,40 @@
 import React, { useState, useEffect } from "react";
-import { db } from "../../lib/db";
 import { NotificationService } from "../../lib/notifications";
 import { format, parseISO, eachDayOfInterval } from "date-fns";
 import { FileText, Clock, CheckCircle, XCircle, List, Trash2, RotateCcw } from "lucide-react";
 import { toast } from "react-hot-toast";
-import { CutiRequest } from "../../types";
+import { CutiRequest, User } from "../../types";
+import { useFirebaseData } from "../../hooks/useFirebaseData";
+import { dbRealtime, getTenantRef } from "../../lib/firebase";
+import { ref, set } from "firebase/database";
 
 export function ManageLeave() {
-  const [cutiList, setCutiList] = useState<CutiRequest[]>(() => db.getCutiRequests());
-  const [users, setUsers] = useState(() => db.getUsers());
+  const { data: cutiData, isOffline: isOfflineCuti } = useFirebaseData('cuti_requests');
+  const { data: usersData, isOffline: isOfflineUsers } = useFirebaseData('users');
+  const { data: attendanceData, isOffline: isOfflineAtt } = useFirebaseData('attendance');
+
+  const isOffline = isOfflineCuti || isOfflineUsers || isOfflineAtt;
+
+  const [cutiList, setCutiList] = useState<CutiRequest[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [activeTab, setActiveTab] = useState<"Pending" | "Approved" | "Rejected" | "All">("Pending");
 
   useEffect(() => {
-    const handleSync = () => {
-      setCutiList(db.getCutiRequests());
-      setUsers(db.getUsers());
-    };
-    window.addEventListener("cuti_updated", handleSync);
-    return () => {
-      window.removeEventListener("cuti_updated", handleSync);
-    };
-  }, []);
+    if (cutiData) setCutiList(Object.values(cutiData) as CutiRequest[]);
+    else setCutiList([]);
+  }, [cutiData]);
+
+  useEffect(() => {
+    if (usersData) setUsers(Object.values(usersData) as User[]);
+    else setUsers([]);
+  }, [usersData]);
 
   // Approval actions for Izin / Cuti Requests
-  const handleCutiApproval = (
+  const handleCutiApproval = async (
     cutiId: string,
     action: "Approved" | "Rejected" | "Pending",
   ) => {
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa melakukan aksi saat offline."); return; }
     const targetCuti = cutiList.find((c) => c.id === cutiId);
 
     const updatedCuti = cutiList.map((c) => {
@@ -35,8 +43,9 @@ export function ManageLeave() {
       }
       return c;
     });
-    db.setCutiRequests(updatedCuti);
-    setCutiList(updatedCuti);
+    
+    const cutiObj = updatedCuti.reduce((acc, curr) => ({ ...acc, [curr.id]: curr }), {});
+    await set(getTenantRef('cuti_requests'), cutiObj);
 
     let attendanceInsertSuccess = true;
     if (action === "Approved" && targetCuti) {
@@ -45,7 +54,7 @@ export function ManageLeave() {
         const end = parseISO(targetCuti.tanggalSelesai);
         const days = eachDayOfInterval({ start, end });
 
-        let currentAttendance = db.getAttendance();
+        let currentAttendance = attendanceData ? Object.values(attendanceData) as any[] : [];
         days.forEach((day) => {
           const formattedDate = format(day, "yyyy-MM-dd");
 
@@ -70,7 +79,8 @@ export function ManageLeave() {
             });
           }
         });
-        db.setAttendance(currentAttendance);
+        const attObj = currentAttendance.reduce((acc, curr) => ({ ...acc, [curr.id]: curr }), {});
+        await set(getTenantRef('attendance'), attObj);
       } catch (e) {
         attendanceInsertSuccess = false;
         console.error("Failed to create attendance entries for cuti", e);
@@ -88,7 +98,7 @@ export function ManageLeave() {
       }
 
       if (targetCuti && (action === "Approved" || action === "Rejected")) {
-        const u = db.getUsers().find(user => user.id === targetCuti.userId);
+        const u = users.find(user => user.id === targetCuti.userId);
         if (u) {
           NotificationService.send(u, "LEAVE_STATUS_UPDATED", {
             time: `${targetCuti.tanggalMulai} s.d ${targetCuti.tanggalSelesai}`,
@@ -100,11 +110,12 @@ export function ManageLeave() {
     }
   };
 
-  const handleDeleteCuti = (cutiId: string) => {
+  const handleDeleteCuti = async (cutiId: string) => {
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menghapus saat offline."); return; }
     if (confirm("Yakin ingin menghapus riwayat pengajuan ini?")) {
       const updated = cutiList.filter((c) => c.id !== cutiId);
-      db.setCutiRequests(updated);
-      setCutiList(updated);
+      const cutiObj = updated.reduce((acc, curr) => ({ ...acc, [curr.id]: curr }), {});
+      await set(getTenantRef('cuti_requests'), cutiObj);
       toast.success("Riwayat pengajuan berhasil dihapus");
     }
   };
@@ -120,6 +131,19 @@ export function ManageLeave() {
 
   return (
     <div className="space-y-6 animate-fade-in text-left font-sans pb-12">
+      {isOffline && (
+        <div className="bg-amber-100 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-center gap-3">
+          <div className="shrink-0">
+            <svg className="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div>
+            <p className="font-bold text-sm">Mode Luring (Offline) Aktif</p>
+            <p className="text-xs mt-0.5">Koneksi terputus. Pengaturan sistem membutuhkan koneksi internet aktif. Form persetujuan telah dikunci.</p>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
         <div>

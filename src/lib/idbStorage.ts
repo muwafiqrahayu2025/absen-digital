@@ -4,8 +4,6 @@ const DB_NAME = 'ABDI_ABSEN_DIGITAL_DB';
 const DB_VERSION = 1;
 
 export interface IDBStoreNames {
-  master_users: 'users';
-  master_school: 'school';
   attendance_logs: string;
   device_config: 'reg_token' | 'last_sync';
 }
@@ -33,13 +31,6 @@ class IDBStorage {
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
-        
-        if (!db.objectStoreNames.contains('master_users')) {
-          db.createObjectStore('master_users');
-        }
-        if (!db.objectStoreNames.contains('master_school')) {
-          db.createObjectStore('master_school');
-        }
         if (!db.objectStoreNames.contains('attendance_logs')) {
           db.createObjectStore('attendance_logs');
         }
@@ -177,15 +168,6 @@ class IDBStorage {
    */
   async hydrateLocalStorage(): Promise<void> {
     try {
-      const users = await this.getItem('master_users', 'users');
-      if (users && Array.isArray(users)) {
-        const cleanUsers = users.filter((u: any) => u !== null && u !== undefined && typeof u === 'object');
-        if (cleanUsers.length > 0) localStorage.setItem('users', JSON.stringify(cleanUsers));
-      }
-      const school = await this.getItem('master_school', 'school');
-      if (school && typeof school === 'object') {
-        localStorage.setItem('school', JSON.stringify(school));
-      }
       const attendance = await this.getItem('attendance_logs', 'attendance');
       if (attendance && Array.isArray(attendance)) {
         const cleanAtt = attendance.filter((a: any) => a !== null && a !== undefined && typeof a === 'object');

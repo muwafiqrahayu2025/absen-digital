@@ -77,6 +77,8 @@ export interface User {
   mapelSertifikasi?: string;
   /** Foto profil dalam format Base64 */
   photoUrl?: string;
+  /** Tenant ID (sekolah) tempat pengguna bernaung. 'GLOBAL' untuk Super Admin */
+  tenantId?: string;
 }
 
 export interface OPD {

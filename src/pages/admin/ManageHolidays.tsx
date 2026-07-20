@@ -3,9 +3,21 @@ import { db } from "../../lib/db";
 import { Holiday } from "../../types";
 import { Plus, Trash2, ArrowLeft, Info, Calendar } from "lucide-react";
 import toast from "react-hot-toast";
+import { useFirebaseData } from "../../hooks/useFirebaseData";
+import { dbRealtime, getTenantRef } from "../../lib/firebase";
+import { ref, set } from "firebase/database";
 
 export function ManageHolidays() {
-  const [holidays, setHolidays] = useState<Holiday[]>(() => db.getHolidays());
+  const { data: holidayData, isOffline } = useFirebaseData('holidays');
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+
+  React.useEffect(() => {
+    if (holidayData) {
+      setHolidays(Object.values(holidayData) as Holiday[]);
+    } else {
+      setHolidays([]);
+    }
+  }, [holidayData]);
   const [isAdding, setIsAdding] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -13,17 +25,19 @@ export function ManageHolidays() {
     description: "",
   });
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menghapus saat offline."); return; }
     if (confirm("Yakin ingin menghapus jadwal libur dinas daerah ini?")) {
       const updated = holidays.filter((h) => h.id !== id);
-      db.setHolidays(updated);
-      setHolidays(updated);
+      const obj = updated.reduce((acc, curr) => ({ ...acc, [curr.id]: curr }), {});
+      await set(getTenantRef('holidays'), obj);
       toast.success("Hari Libur Sekolah berhasil dihapus");
     }
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
     if (!formData.date || !formData.description) return;
 
     const newHoliday: Holiday = {
@@ -33,8 +47,8 @@ export function ManageHolidays() {
     };
 
     const updated = [newHoliday, ...holidays];
-    db.setHolidays(updated);
-    setHolidays(updated);
+    const obj = updated.reduce((acc, curr) => ({ ...acc, [curr.id]: curr }), {});
+    await set(getTenantRef('holidays'), obj);
 
     setFormData({ date: "", description: "" });
     setIsAdding(false);
@@ -130,6 +144,19 @@ export function ManageHolidays() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto text-left animate-fade-in">
+      {isOffline && (
+        <div className="bg-amber-100 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-center gap-3">
+          <div className="shrink-0">
+            <svg className="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div>
+            <p className="font-bold text-sm">Mode Luring (Offline) Aktif</p>
+            <p className="text-xs mt-0.5">Koneksi terputus. Pengaturan sistem membutuhkan koneksi internet aktif. Form CRUD telah dikunci.</p>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <div>
           <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">

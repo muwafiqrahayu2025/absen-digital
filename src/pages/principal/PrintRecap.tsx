@@ -39,7 +39,7 @@ export function PrintRecap() {
         {/* Teks Kop Tengah */}
         <div className="flex-1 text-center space-y-0.5">
           <p className="text-sm font-bold tracking-wide uppercase">
-            {school?.kopSurat?.nama_dinas || school?.nama_dinas || "YAYASAN PENDIDIKAN DAN KEBUDAYAAN"}
+            {school?.kopSurat?.nama_dinas || school?.nama_dinas || "Nama Yayasan/Dinas Belum Diatur"}
           </p>
           <h1 className="text-xl md:text-2xl font-black uppercase tracking-tight leading-tight">
             {school?.kopSurat?.nama_instansi || school?.nama_instansi || school?.name || "SMA / SMP / KAMPUS UNGGULAN NUSANTARA"}
@@ -75,7 +75,7 @@ export function PrintRecap() {
 
       <div className="mb-6 grid grid-cols-[180px_1fr] gap-1 text-xs">
         <div className="font-bold">Dokumen Kerja</div>
-        <div>: {school?.name ? (school.name.includes(" / ") ? "Dinas / Yayasan / Rektorat" : school.name) : "Dinas / Yayasan / Rektorat / Instansi"}</div>
+        <div>: {school?.kopSurat?.nama_dinas || school?.nama_dinas || "Nama Yayasan/Dinas Belum Diatur"}</div>
 
         <div className="font-bold">Tahun Ajaran / Akademik</div>
         <div>: T.A. {activeAcademicYear?.name || "2026/2027"}</div>
@@ -186,7 +186,7 @@ export function PrintRecap() {
                   {usr.name}
                 </td>
                 <td className="border border-black p-2">
-                  {usr.opd || "Dinas / Yayasan / Rektorat"}
+                  {usr.opd || "-"}
                 </td>
                 <td className="border border-black p-2">
                   {usr.gender === "Perempuan" ? "P" : "L"}

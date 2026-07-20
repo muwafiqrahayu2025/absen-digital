@@ -1,15 +1,33 @@
 import React, { useState, useEffect } from "react";
-import { db } from "../../lib/db";
 import { ClassSchedule, User } from "../../types";
 import { Calendar, Plus, Edit2, Trash2, X, Clock, MapPin, BookOpen, Users } from "lucide-react";
 import { toast } from "react-hot-toast";
+import { useFirebaseData } from "../../hooks/useFirebaseData";
+import { dbRealtime, getTenantRef } from "../../lib/firebase";
+import { ref, set } from "firebase/database";
 
 const DAYS_OF_WEEK = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
 export function ManageSchedule() {
+  const { data: scheduleData, isOffline: isOfflineSch } = useFirebaseData('schedules');
+  const { data: usersData, isOffline: isOfflineUsers } = useFirebaseData('users');
+  const isOffline = isOfflineSch || isOfflineUsers;
+
   const [schedules, setSchedules] = useState<ClassSchedule[]>([]);
   const [teachers, setTeachers] = useState<User[]>([]);
-  
+
+  useEffect(() => {
+    if (scheduleData) setSchedules(Object.values(scheduleData) as ClassSchedule[]);
+    else setSchedules([]);
+  }, [scheduleData]);
+
+  useEffect(() => {
+    if (usersData) {
+      const allUsers = Object.values(usersData) as User[];
+      setTeachers(allUsers.filter(u => u.role === 'guru' || u.role === 'dosen' || u.role === 'kepala_sekolah'));
+    } else setTeachers([]);
+  }, [usersData]);
+
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
@@ -19,18 +37,9 @@ export function ManageSchedule() {
     endTime: "08:30"
   });
 
-  const loadData = () => {
-    setSchedules(db.getSchedules());
-    const allUsers = db.getUsers();
-    setTeachers(allUsers.filter(u => u.role === 'guru' || u.role === 'dosen' || u.role === 'kepala_sekolah'));
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
     if (!formData.teacherId || !formData.subject || !formData.className || !formData.dayOfWeek || !formData.startTime || !formData.endTime) {
       toast.error("Mohon lengkapi semua field jadwal!");
       return;
@@ -46,17 +55,24 @@ export function ManageSchedule() {
       endTime: formData.endTime
     };
 
-    db.saveSchedule(newSchedule);
+    const updated = editingId 
+      ? schedules.map(s => s.id === editingId ? newSchedule : s)
+      : [...schedules, newSchedule];
+    
+    const obj = updated.reduce((acc, curr) => ({ ...acc, [curr.id]: curr }), {});
+    await set(getTenantRef('schedules'), obj);
+
     toast.success(`Jadwal berhasil ${editingId ? 'diperbarui' : 'ditambahkan'}!`);
     setShowModal(false);
-    loadData();
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menghapus saat offline."); return; }
     if (confirm("Apakah Anda yakin ingin menghapus jadwal ini?")) {
-      db.deleteSchedule(id);
+      const updated = schedules.filter(s => s.id !== id);
+      const obj = updated.reduce((acc, curr) => ({ ...acc, [curr.id]: curr }), {});
+      await set(getTenantRef('schedules'), obj);
       toast.success("Jadwal berhasil dihapus!");
-      loadData();
     }
   };
 
@@ -73,7 +89,20 @@ export function ManageSchedule() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 text-left">
+      {isOffline && (
+        <div className="bg-amber-100 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-center gap-3">
+          <div className="shrink-0">
+            <svg className="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div>
+            <p className="font-bold text-sm">Mode Luring (Offline) Aktif</p>
+            <p className="text-xs mt-0.5">Koneksi terputus. Pengaturan sistem membutuhkan koneksi internet aktif. Form CRUD telah dikunci.</p>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">

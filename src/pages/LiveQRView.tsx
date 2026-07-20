@@ -388,10 +388,10 @@ export function LiveQRView() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] sm:text-xs font-extrabold tracking-widest uppercase text-indigo-300 drop-shadow-sm leading-tight truncate">
-                {school.kopSurat?.nama_dinas || school.nama_dinas || "DINAS PENDIDIKAN DAN KEBUDAYAAN"}
+                {school.kopSurat?.nama_dinas || school.nama_dinas || "Nama Yayasan/Dinas Belum Diatur"}
               </p>
               <h1 className="text-sm sm:text-xl lg:text-2xl font-black tracking-tight text-white drop-shadow-md uppercase leading-snug truncate">
-                {school.kopSurat?.nama_instansi || school.nama_instansi || school.name || "SMA UNGGULAN NUSANTARA"}
+                {school.kopSurat?.nama_instansi || school.nama_instansi || school.name || "Nama Instansi Belum Diatur"}
               </h1>
               <p className="text-[10px] text-slate-300/80 font-medium truncate hidden sm:block">
                 {school.kopSurat?.alamat || school.alamat || school.address || "Jl. Pendidikan No. 1, Indonesia"}

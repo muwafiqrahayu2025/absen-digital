@@ -22,6 +22,8 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import { CutiRequest, AttendanceRecord } from "../../types";
 import { useAuth } from "../../components/AuthContext";
+import { useGlobalSettings } from "../../hooks/useGlobalSettings";
+import { AlertTriangle } from "lucide-react";
 
 export function ManageAttendance() {
   const { user: currentUser } = useAuth();
@@ -38,6 +40,9 @@ export function ManageAttendance() {
   );
   const [users, setUsers] = useState(() => db.getUsers());
   const activeAcademicYear = db.getAcademicYears().find((ay) => ay && ay.isActive);
+  
+  const [showWaFallbackModal, setShowWaFallbackModal] = useState(false);
+  const { settings: globalSettings, loading: globalSettingsLoading } = useGlobalSettings();
 
   useEffect(() => {
     const handleSync = () => {
@@ -133,17 +138,46 @@ export function ManageAttendance() {
     setSelectedMonth(null);
   };
 
-  // BUG-05 FIX: Generate months dynamically based on current date instead of hardcoding 2026
+  // UBAHAN LOGIKA BULAN: Otomatis sinkron dengan Tahun Ajaran dan Semester aktif
   const months = (() => {
     const result: { value: string; label: string }[] = [];
-    const now = new Date();
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const value = format(d, "yyyy-MM");
-      const label = format(d, "MMMM yyyy", { locale: id });
-      result.push({ value, label: label.charAt(0).toUpperCase() + label.slice(1) });
+
+    if (activeAcademicYear) {
+      const years = activeAcademicYear.name.split('/');
+      const startYear = parseInt(years[0]) || new Date().getFullYear();
+      const endYear = parseInt(years[1]) || startYear + 1;
+      const isGanjil = activeAcademicYear.semester.toLowerCase() === 'ganjil';
+
+      if (isGanjil) {
+        // Semester Ganjil: Juli s.d. Desember (index bulan 6 sampai 11)
+        for (let i = 6; i <= 11; i++) {
+          const d = new Date(startYear, i, 1);
+          const value = format(d, "yyyy-MM");
+          const label = format(d, "MMMM yyyy", { locale: id });
+          result.push({ value, label: label.charAt(0).toUpperCase() + label.slice(1) });
+        }
+      } else {
+        // Semester Genap: Januari s.d. Juni (index bulan 0 sampai 5)
+        for (let i = 0; i <= 5; i++) {
+          const d = new Date(endYear, i, 1);
+          const value = format(d, "yyyy-MM");
+          const label = format(d, "MMMM yyyy", { locale: id });
+          result.push({ value, label: label.charAt(0).toUpperCase() + label.slice(1) });
+        }
+      }
+    } else {
+      // Fallback jika tidak ada data tahun ajaran: 6 bulan terakhir
+      const now = new Date();
+      for (let i = 0; i < 6; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const value = format(d, "yyyy-MM");
+        const label = format(d, "MMMM yyyy", { locale: id });
+        result.push({ value, label: label.charAt(0).toUpperCase() + label.slice(1) });
+      }
     }
-    return result;
+
+    // Dibalik urutannya agar bulan terbaru (contoh: Desember) berada di atas/kiri
+    return result.reverse();
   })();
 
   if (selectedMonth) {
@@ -178,7 +212,7 @@ export function ManageAttendance() {
           No: index + 1,
           "Nama Pegawai / Guru / Dosen": usr.name,
           "ID Pegawai / NIP / NIDN / NIK": `/${usr.nip || "-"}`,
-          "Lembaga Naungan": usr.opd || "Dinas / Yayasan / Rektorat",
+          "Lembaga Naungan": usr.opd || "Nama Yayasan/Dinas Belum Diatur",
           Jabatan: usr.jabatan || "Posisi / Jabatan",
         };
 
@@ -188,7 +222,7 @@ export function ManageAttendance() {
           let statusStr = "";
           let CheckOutMark = "";
 
-        if (record) {
+          if (record) {
             if (record.status === "Hadir") {
               totalH++;
               statusStr = "H";
@@ -239,8 +273,21 @@ export function ManageAttendance() {
 
     const handleSendBroadcast = () => {
       if (!selectedMonth) return;
-      const selectedMonthLabel = months.find((m) => m.value === selectedMonth)?.label;
       
+      const currentSchool = db.getSchool();
+      const hasNotifApi = !!(currentSchool.gasWebAppUrl || currentSchool.whatsappApiKey);
+      
+      if (!hasNotifApi) {
+        if (!globalSettingsLoading && globalSettings.wa_fallback_enabled) {
+          setShowWaFallbackModal(true);
+          return;
+        }
+        toast.error("API Notifikasi Belum Dikonfigurasi. Pesan broadcast tidak dapat dikirim.");
+        return;
+      }
+      
+      const selectedMonthLabel = months.find((m) => m.value === selectedMonth)?.label;
+
       const filteredUsers = users.filter((u) => u.role !== "admin");
       let count = 0;
 
@@ -257,14 +304,14 @@ export function ManageAttendance() {
         });
 
         const extraInfo = `- Hadir/Terlambat: ${totalH} Hari\n- Sakit: ${totalS} Hari\n- Izin/Cuti: ${totalI} Hari\n- Tanpa Keterangan (Alpha): ${totalA} Hari`;
-        
+
         NotificationService.send(usr, 'MONTHLY_ATTENDANCE_SUMMARY', {
           time: selectedMonthLabel,
           extraInfo: extraInfo
         });
         count++;
       });
-      
+
       toast.success(`Rekap bulanan berhasil disiarkan ke ${count} Guru/Staf!`);
     };
 
@@ -280,12 +327,21 @@ export function ManageAttendance() {
             </button>
             <div className="flex-1"></div>
             <div className="flex flex-col sm:flex-row gap-2">
-              <button
-                onClick={handleSendBroadcast}
-                className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#3b5bdb] to-[#1d3557] border border-[#748ffc] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_0_6px_15px_rgba(59,91,219,0.4)] hover:from-[#4c6ef5] hover:to-[#1d3557] hover:-translate-y-[2px] transition-all duration-200"
-              >
-                <Send size={14} className="text-blue-200" /> Siarkan Rekap Bulanan via WA/Email
-              </button>
+              {(!db.getSchool().gasWebAppUrl && !db.getSchool().whatsappApiKey && !globalSettingsLoading && globalSettings.wa_fallback_enabled) ? (
+                <button
+                  onClick={handleSendBroadcast}
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-emerald-600 border border-emerald-500 shadow-md hover:bg-emerald-700 transition-all duration-200"
+                >
+                  <Send size={14} className="text-emerald-200" /> Siarkan via WA Web
+                </button>
+              ) : (
+                <button
+                  onClick={handleSendBroadcast}
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#3b5bdb] to-[#1d3557] border border-[#748ffc] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_0_6px_15px_rgba(59,91,219,0.4)] hover:from-[#4c6ef5] hover:to-[#1d3557] hover:-translate-y-[2px] transition-all duration-200"
+                >
+                  <Send size={14} className="text-blue-200" /> Siarkan Rekap Bulanan via WA/Email
+                </button>
+              )}
               <button
                 onClick={handleExportExcel}
                 className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:-translate-y-[2px] transition-all duration-200"
@@ -294,12 +350,98 @@ export function ManageAttendance() {
               </button>
             </div>
           </div>
+          
+          {/* MODAL WA FALLBACK REKAP BULANAN */}
+          {showWaFallbackModal && (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4 animate-fade-in backdrop-blur-sm">
+              <div className="bg-white rounded-[2rem] max-w-xl w-full p-6 shadow-2xl max-h-[85vh] flex flex-col border border-slate-100">
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600">
+                      <Smartphone size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-slate-800">Kirim Rekap via WA Web</h3>
+                      <p className="text-xs text-slate-500">Pilih kontak untuk mengirim laporan ini secara manual</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowWaFallbackModal(false)} className="p-2 bg-slate-100 text-slate-500 rounded-full hover:bg-slate-200 transition">
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-xl text-xs mb-4 flex gap-3">
+                  <AlertTriangle className="shrink-0 text-amber-500 mt-0.5" size={16} />
+                  <div>
+                    <strong className="block mb-0.5">Kirim Massal Terbatas</strong>
+                    Tip: Gunakan API WhatsApp Gateway pada pengaturan Dasbor Pengembang untuk mengirim pesan massal secara otomatis di latar belakang tanpa perlu klik satu per satu.
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto min-h-0 space-y-2 pr-2 custom-scrollbar">
+                  {users.filter(u => (u.role !== 'admin' && u.role !== 'developer')).map((usr, i) => {
+                    let phoneNumber = usr.phone || "";
+                    if (phoneNumber.startsWith('0')) phoneNumber = '62' + phoneNumber.substring(1);
+                    if (phoneNumber.startsWith('+')) phoneNumber = phoneNumber.substring(1);
+                    
+                    const isWaValid = phoneNumber && phoneNumber.length > 8;
+                    const selectedMonthLabel = months.find((m) => m.value === selectedMonth)?.label;
+
+                    const usrRecords = attendanceList.filter((a) => a.userId === usr.id && selectedMonth && a.date.startsWith(selectedMonth));
+                    let totalH = 0, totalS = 0, totalI = 0, totalA = 0;
+                    usrRecords.forEach((record) => {
+                      if (record.status === "Hadir" || record.status === "Terlambat") totalH++;
+                      if (record.status === "Sakit") totalS++;
+                      if (record.status === "Izin" || record.status === "Cuti Tahunan") totalI++;
+                      if (record.status === "Alpha") totalA++;
+                    });
+                    
+                    const finalMsg = encodeURIComponent(`*REKAP PRESENSI BULANAN*\n\nHalo ${usr.name},\nBerikut adalah rekap kehadiran Anda untuk bulan ${selectedMonthLabel}:\n\n- Hadir/Terlambat: ${totalH} Hari\n- Sakit: ${totalS} Hari\n- Izin/Cuti: ${totalI} Hari\n- Tanpa Keterangan (Alpha): ${totalA} Hari\n\n_Pesan otomatis dari Sistem Kepegawaian_`);
+                    const waLink = `https://wa.me/${phoneNumber}?text=${finalMsg}`;
+                    
+                    return (
+                      <div key={usr.id || i} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-white hover:border-emerald-200 transition">
+                        <div>
+                          <div className="font-bold text-sm text-slate-800">{usr.name}</div>
+                          <div className="text-[10px] text-slate-500">{usr.phone || "Tidak ada nomor"}</div>
+                        </div>
+                        {isWaValid ? (
+                          <a 
+                            href={waLink} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm shrink-0"
+                          >
+                            <Send size={14} /> Kirim
+                          </a>
+                        ) : (
+                          <span className="px-3 py-1.5 bg-slate-100 text-slate-400 rounded-lg text-[10px] font-bold shrink-0">Nomor Invalid</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {users.filter(u => (u.role !== 'admin' && u.role !== 'developer')).length === 0 && (
+                    <div className="text-center p-6 text-slate-400 text-sm">Belum ada data pegawai/guru.</div>
+                  )}
+                </div>
+                
+                <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
+                  <button 
+                    onClick={() => setShowWaFallbackModal(false)}
+                    className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-sm font-bold transition"
+                  >
+                    Selesai
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="border-l-4 border-l-[#ffc107] pl-4 text-xs text-slate-700 grid grid-cols-[140px_1fr] gap-1 mb-6 font-mono uppercase bg-slate-50 p-4 rounded-xl">
             <div className="font-bold">Portal Induk</div>
             <div>: SISTEM PRESENSI & MANAJEMEN DIGITAL</div>
             <div className="font-bold">Lembaga / Instansi</div>
-            <div>: {db.getSchool().name ? (db.getSchool().name.includes(" / ") ? "Dinas / Yayasan / Rektorat / Instansi" : db.getSchool().name) : "Dinas / Yayasan / Rektorat / Instansi"}</div>
+            <div>: {db.getSchool().kopSurat?.nama_dinas || db.getSchool().nama_dinas || "Nama Yayasan/Dinas Belum Diatur"}</div>
             <div className="font-bold">Periode Laporan</div>
             <div>: {selectedMonthLabel}</div>
           </div>
@@ -420,7 +562,7 @@ export function ManageAttendance() {
                           {usr.nip || "—"}
                         </td>
                         <td className="p-3 border border-slate-200 text-center text-indigo-600 font-bold text-[10px]">
-                          {usr.opd || "Dinas / Yayasan / Rektorat"}
+                          {usr.opd || "-"}
                         </td>
 
                         {days.map((d) => {
@@ -625,13 +767,12 @@ export function ManageAttendance() {
                       </td>
                       <td className="p-3">
                         <span
-                          className={`inline-flex px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                            record.status === "Hadir"
+                          className={`inline-flex px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${record.status === "Hadir"
                               ? "bg-emerald-100 text-emerald-800"
                               : record.status === "Terlambat"
                                 ? "bg-amber-100 text-amber-800"
                                 : "bg-indigo-100 text-indigo-805"
-                          }`}
+                            }`}
                         >
                           {record.status}
                         </span>
@@ -644,11 +785,10 @@ export function ManageAttendance() {
                       <td className="p-3 text-center">
                         {record.distance !== undefined ? (
                           <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold ${
-                              record.distance <= (db.getSchool().radius || 120)
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold ${record.distance <= (db.getSchool().radius || 120)
                                 ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                                 : "bg-rose-50 text-rose-800 border border-rose-200"
-                            }`}
+                              }`}
                           >
                             🎯 {record.distance}m
                           </span>

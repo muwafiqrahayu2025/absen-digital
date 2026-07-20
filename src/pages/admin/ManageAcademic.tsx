@@ -1,8 +1,11 @@
 import React, { useState } from "react";
-import {  db  } from "../../lib/db";
+import { db } from "../../lib/db";
 import { AcademicYear } from "../../types";
 import { Plus, Edit2, Trash2, Clock, Briefcase, Calendar, Save, X } from 'lucide-react';
 import toast from "react-hot-toast";
+import { useFirebaseData } from "../../hooks/useFirebaseData";
+import { dbRealtime, getTenantRef } from "../../lib/firebase";
+import { ref, set } from "firebase/database";
 
 interface ShiftSchedule {
   id: string;
@@ -16,17 +19,18 @@ interface ShiftSchedule {
 }
 
 export function ManageAcademic() {
-  const [schedules, setSchedules] = useState<ShiftSchedule[]>(() => {
-    const cached = localStorage.getItem("instansi_shift_schedules") || localStorage.getItem("madrasah_shift_schedules");
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        const list = Array.isArray(parsed) ? parsed : Object.values(parsed);
-        return list.filter((item: any) => item !== null && item !== undefined && typeof item === 'object');
-      } catch (e) {}
+  const { data: shiftData, isOffline, loading: shiftLoading } = useFirebaseData('shift_schedules');
+  const { data: academicData, loading: academicLoading } = useFirebaseData('academic_years');
+
+  const [schedules, setSchedules] = useState<ShiftSchedule[]>([]);
+
+  React.useEffect(() => {
+    if (shiftData) {
+      setSchedules(Object.values(shiftData) as ShiftSchedule[]);
+    } else {
+      setSchedules([]);
     }
-    return [];
-  });
+  }, [shiftData]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<ShiftSchedule | null>(
@@ -43,9 +47,10 @@ export function ManageAcademic() {
     isActive: false,
   });
 
-  const saveToStorage = (updated: ShiftSchedule[]) => {
-    localStorage.setItem("instansi_shift_schedules", JSON.stringify(updated));
-    setSchedules(updated);
+  const saveToStorage = async (updated: ShiftSchedule[]) => {
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
+    const obj = updated.reduce((acc, curr) => ({ ...acc, [curr.id]: curr }), {});
+    await set(getTenantRef('shift_schedules'), obj);
   };
 
   const handleDelete = (id: string) => {
@@ -114,7 +119,15 @@ export function ManageAcademic() {
 
   // --- Academic Year & Semester States & Logic ---
   const [activeTab, setActiveTab] = useState<'academic' | 'schedule'>('academic');
-  const [academicYears, setAcademicYears] = useState<AcademicYear[]>(() => db.getAcademicYears());
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
+
+  React.useEffect(() => {
+    if (academicData) {
+      setAcademicYears(Object.values(academicData) as AcademicYear[]);
+    } else {
+      setAcademicYears([]);
+    }
+  }, [academicData]);
   const [isAcademicModalOpen, setIsAcademicModalOpen] = useState(false);
   const [editingAcademic, setEditingAcademic] = useState<AcademicYear | null>(null);
   const [academicFormData, setAcademicFormData] = useState({
@@ -123,9 +136,10 @@ export function ManageAcademic() {
     isActive: false,
   });
 
-  const saveAcademicToStorage = (updated: AcademicYear[]) => {
-    db.setAcademicYears(updated);
-    setAcademicYears(updated);
+  const saveAcademicToStorage = async (updated: AcademicYear[]) => {
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
+    const obj = updated.reduce((acc, curr) => ({ ...acc, [curr.id]: curr }), {});
+    await set(getTenantRef('academic_years'), obj);
   };
 
   const handleAddNewAcademic = () => {
@@ -220,6 +234,19 @@ export function ManageAcademic() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto animate-fade-in text-left">
+      {isOffline && (
+        <div className="bg-amber-100 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-center gap-3">
+          <div className="shrink-0">
+            <svg className="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div>
+            <p className="font-bold text-sm">Mode Luring (Offline) Aktif</p>
+            <p className="text-xs mt-0.5">Koneksi terputus. Pengaturan sistem membutuhkan koneksi internet aktif. Form CRUD telah dikunci.</p>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <div>
           <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">

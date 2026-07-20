@@ -1,11 +1,10 @@
-import { dbRealtime } from "./firebase";
-import { ref, set, onValue } from "firebase/database";
+import { dbRealtime, getTenantRef } from "./firebase";
+import { ref, set } from "firebase/database";
 import { db } from "./db";
 import { idbStorage } from "./idbStorage";
 
 let isSyncing = false;
 let syncTimer: any = null;
-let unsubscribeDb: (() => void) | null = null;
 let onlineListener: (() => void) | null = null;
 
 export interface OfflineSyncItem {
@@ -77,7 +76,7 @@ export async function processOfflineQueue(): Promise<{ synced: number; pending: 
           acc[att.id] = syncedAtt;
           return acc;
         }, {} as Record<string, any>);
-        await set(ref(dbRealtime, 'attendance'), aMap);
+        await set(getTenantRef('attendance'), aMap);
         const updatedAttendance = attendance.map(a => ({
           ...a,
           isSynced: true,
@@ -101,7 +100,7 @@ export async function processOfflineQueue(): Promise<{ synced: number; pending: 
 
   for (const item of queue) {
     try {
-      await set(ref(dbRealtime, item.path), item.data);
+      await set(getTenantRef(item.path), item.data);
       syncedCount++;
       console.log(`[Offline-Online Sync] Sukses menyinkronkan: ${item.path}`);
 
@@ -151,7 +150,7 @@ export const pushToFirebase = async (path: string, data: any): Promise<boolean> 
   }
 
   try {
-    await set(ref(dbRealtime, path), data);
+    await set(getTenantRef(path), data);
     // If successfully synced attendance right now, make sure local state reflects that
     if (path === 'attendance' && data) {
       const attendance = db.getAttendance();
@@ -177,10 +176,6 @@ export const pushToFirebase = async (path: string, data: any): Promise<boolean> 
 };
 
 export function cleanupFirebaseSync() {
-  if (unsubscribeDb) {
-    unsubscribeDb();
-    unsubscribeDb = null;
-  }
   if (onlineListener) {
     window.removeEventListener('online', onlineListener);
     onlineListener = null;
@@ -195,99 +190,6 @@ export function cleanupFirebaseSync() {
 export function initializeFirebaseSync(): () => void {
   if (isSyncing) return cleanupFirebaseSync;
   isSyncing = true;
-
-  const dbRef = ref(dbRealtime, '/');
-
-  // Listen for changes from Firebase Realtime Database (Full Online Mode)
-  unsubscribeDb = onValue(dbRef, (snapshot) => {
-    if (!snapshot.exists()) {
-      // If Firebase is completely empty, seed it with initial seed/local data
-      const seedData = {
-        users: db.getUsers(),
-        school: db.getSchool(),
-        opds: db.getOPDs(),
-        satuan_kerjas: db.getSatuanKerjas(),
-        jabatans: db.getJabatans(),
-        academicYears: db.getAcademicYears(),
-        holidays: db.getHolidays(),
-        class_schedules: db.getSchedules(),
-        attendance: db.getAttendance()
-      };
-      set(dbRef, seedData).catch((err) => {
-        console.warn("[Offline-Online Sync] Gagal menulis seed data ke root '/', mencoba menyinkronkan per kategori utama...", err);
-        if (seedData.school) enqueueOfflineSync('school', seedData.school);
-        if (seedData.users) enqueueOfflineSync('users', seedData.users);
-      });
-      return;
-    }
-
-    if (snapshot.exists()) {
-      const data = snapshot.val();
-      
-      // Check if we have unpushed offline queue items. If so, don't overwrite local pending work with older cloud state right now!
-      const pendingQueue = getOfflineQueue();
-      if (pendingQueue.length > 0) {
-        console.log(`[Offline-Online Sync] Terdapat ${pendingQueue.length} data di antrean lokal belum ter-upload. Menunda timpa data dari Cloud...`);
-        processOfflineQueue();
-        return;
-      }
-
-      if (data.school) {
-        localStorage.setItem('school', JSON.stringify(data.school));
-        idbStorage.setItem('master_school', 'school', data.school);
-        // Sinkronisasi kioskBgUrl dan marqueeText dari Firebase ke localStorage agar LiveQRView.tsx selalu reaktif
-        if (data.school.kioskBgUrl && data.school.kioskBgUrl.trim() !== "") {
-          localStorage.setItem('qr_kiosk_bg_url', data.school.kioskBgUrl);
-        } else {
-          localStorage.removeItem('qr_kiosk_bg_url');
-        }
-        if (data.school.marqueeText !== undefined && data.school.marqueeText !== null && data.school.marqueeText.trim() !== "") {
-          localStorage.setItem('qr_marquee_text', data.school.marqueeText);
-        } else {
-          localStorage.removeItem('qr_marquee_text');
-        }
-        // Selalu dispatch firebase_sync_updated & school_updated event setelah sync agar komponen langsung merespons perubahan / reset default
-        window.dispatchEvent(new Event('firebase_sync_updated'));
-        window.dispatchEvent(new Event('school_updated'));
-      }
-      
-      const normalizeArray = (obj: any) => {
-        if (!obj) return [];
-        const list = Array.isArray(obj) ? obj : Object.values(obj);
-        return list.filter((item: any) => item !== null && item !== undefined && typeof item === 'object');
-      };
-
-      if (data.users) {
-        const normUsers = normalizeArray(data.users);
-        const currentLocalUsers = db.getUsers();
-        // Gabungkan (merge) data cloud dengan password lokal yang tersimpan agar password tidak hilang/terhapus
-        const mergedUsers = normUsers.map((cloudUser: any) => {
-          const localMatch = currentLocalUsers.find(u => u.id === cloudUser.id || u.username === cloudUser.username);
-          return {
-            ...cloudUser,
-            password: cloudUser.password || localMatch?.password || (cloudUser.username === 'alpha_project' ? 'garut001' : cloudUser.username === 'admin' ? 'admin' : '')
-          };
-        });
-        localStorage.setItem('users', JSON.stringify(mergedUsers));
-        idbStorage.setItem('master_users', 'users', mergedUsers);
-      }
-      if (data.attendance) {
-        const normAtt = normalizeArray(data.attendance);
-        localStorage.setItem('attendance', JSON.stringify(normAtt));
-        idbStorage.setItem('attendance_logs', 'attendance', normAtt);
-      }
-      if (data.opds) localStorage.setItem('opds', JSON.stringify(normalizeArray(data.opds)));
-      if (data.satuan_kerjas) localStorage.setItem('satuan_kerjas', JSON.stringify(normalizeArray(data.satuan_kerjas)));
-      if (data.jabatans) localStorage.setItem('jabatans', JSON.stringify(normalizeArray(data.jabatans)));
-      if (data.cuti_requests) localStorage.setItem('cuti_requests', JSON.stringify(normalizeArray(data.cuti_requests)));
-      if (data.kinerja_records) localStorage.setItem('kinerja_records', JSON.stringify(normalizeArray(data.kinerja_records)));
-      if (data.academicYears) localStorage.setItem('academicYears', JSON.stringify(normalizeArray(data.academicYears)));
-      if (data.holidays) localStorage.setItem('holidays', JSON.stringify(normalizeArray(data.holidays)));
-      if (data.class_schedules) localStorage.setItem('class_schedules', JSON.stringify(normalizeArray(data.class_schedules)));
-      
-      window.dispatchEvent(new Event('firebase_sync_updated'));
-    }
-  });
 
   // Setup automatic background sync listeners for offline->online recovery
   onlineListener = () => {

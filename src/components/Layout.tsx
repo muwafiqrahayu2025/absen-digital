@@ -41,7 +41,6 @@ import {
   BookOpen,
 } from "lucide-react";
 import { DeveloperSettingsModal } from "./DeveloperSettingsModal";
-import { DeveloperSettingsModal } from "./DeveloperSettingsModal";
 import { WindowControls } from "./WindowControls";
 import toast from "react-hot-toast";
 import { cn } from "../lib/utils";
@@ -467,6 +466,7 @@ export function Layout() {
     {
       group: "PLATFORM & SISTEM",
       items: [
+        { to: "/admin/tenants", icon: <Building size={17} />, label: "Daftar Tenant" },
         { to: "/admin/developer", icon: <Terminal size={17} />, label: "Developer Console" },
         { to: "/admin/school", icon: <Settings size={17} />, label: "Konfigurasi Sistem" },
       ],
@@ -507,9 +507,9 @@ export function Layout() {
 
   const roleBadgeIcon =
     user?.role === "developer" ? <Terminal size={12} className="text-amber-600 shrink-0" /> :
-    user?.role === "admin" ? <ShieldCheck size={12} className="text-indigo-600 shrink-0" /> :
-    user?.role === "kepala_sekolah" ? <Award size={12} className="text-purple-600 shrink-0" /> :
-    <UserCircle size={12} className="text-current shrink-0" />;
+      user?.role === "admin" ? <ShieldCheck size={12} className="text-indigo-600 shrink-0" /> :
+        user?.role === "kepala_sekolah" ? <Award size={12} className="text-purple-600 shrink-0" /> :
+          <UserCircle size={12} className="text-current shrink-0" />;
 
   const avatarClass =
     user?.role === "developer"
@@ -544,74 +544,74 @@ export function Layout() {
 
       {/* ── SIDEBAR — Tidak dirender untuk teacher/staf (navigasi via bottom tab bar) ── */}
       {!isTeacherOrStaff && (
-      <aside
-        className={cn(
-          "print:hidden w-64 text-white flex flex-col transition-transform duration-300 ease-in-out z-50 shrink-0 theme-gradient",
-          "fixed inset-y-0 left-0 md:relative md:translate-x-0",
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
-        {/* Header logo */}
-        <div className="h-[68px] flex items-center justify-between gap-3 px-4 border-b border-white/10 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <img
-              src={customLogo || "/logo-abdi.png"}
-              alt="Logo ABDI"
-              className="w-10 h-10 object-contain drop-shadow-sm shrink-0"
-            />
-            <div className="flex flex-col min-w-0">
-              <span className="text-base font-black text-white leading-none tracking-widest">ABDI</span>
-              <span className="text-[11px] font-semibold text-white/80 leading-none truncate mt-0.5">Absen Digital</span>
-            </div>
-          </div>
-          {/* Tombol close sidebar di mobile */}
-          <button
-            onClick={() => setIsSidebarOpen(false)}
-            className="md:hidden w-7 h-7 rounded-lg flex items-center justify-center bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition shrink-0 cursor-pointer"
-            aria-label="Tutup menu"
-          >
-            <X size={15} />
-          </button>
-        </div>
-
-        {/* Nav */}
-        <nav className="flex-1 py-3 px-2.5 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/20">
-          {currentMenu.map((section, idx) => (
-            <div key={idx} className="mb-4 last:mb-0">
-              {section.group && (
-                <div className="px-3 text-[9.5px] font-black uppercase tracking-[0.15em] mb-1.5 text-white/40">
-                  {section.group}
-                </div>
-              )}
-              <div className="space-y-0.5">
-                {section.items.map((item, itemIdx) => (
-                  <NavGroup key={itemIdx} item={item} currentPath={location.pathname} />
-                ))}
+        <aside
+          className={cn(
+            "print:hidden w-64 text-white flex flex-col transition-transform duration-300 ease-in-out z-50 shrink-0 theme-gradient",
+            "fixed inset-y-0 left-0 md:relative md:translate-x-0",
+            isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          )}
+        >
+          {/* Header logo */}
+          <div className="h-[68px] flex items-center justify-between gap-3 px-4 border-b border-white/10 shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <img
+                src={customLogo || "/logo-abdi.png"}
+                alt="Logo ABDI"
+                className="w-10 h-10 object-contain drop-shadow-sm shrink-0"
+              />
+              <div className="flex flex-col min-w-0">
+                <span className="text-base font-black text-white leading-none tracking-widest">ABDI</span>
+                <span className="text-[11px] font-semibold text-white/80 leading-none truncate mt-0.5">Absen Digital</span>
               </div>
             </div>
-          ))}
-        </nav>
-
-        {/* User card di bawah sidebar */}
-        <div className="p-3 shrink-0 border-t border-white/10">
-          {user?.role === "developer" && (
-            <div className="mb-2 flex items-center justify-center gap-1.5 px-2 py-1 rounded-lg bg-amber-400/20 border border-amber-400/30">
-              <Terminal size={11} className="text-amber-300 shrink-0" />
-              <span className="text-[9px] font-black text-amber-300 tracking-widest uppercase">Dev Mode</span>
-            </div>
-          )}
-          <div className="bg-white/12 backdrop-blur-sm rounded-xl p-2.5 flex items-center gap-2.5 border border-white/15">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ${avatarClass}`}>
-              {user?.name?.charAt(0)?.toUpperCase() || "U"}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-bold text-white truncate leading-snug">{user?.name || "Pengguna"}</p>
-              <p className="text-[10px] text-white/60 truncate leading-snug">{roleLabel}</p>
-            </div>
+            {/* Tombol close sidebar di mobile */}
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="md:hidden w-7 h-7 rounded-lg flex items-center justify-center bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition shrink-0 cursor-pointer"
+              aria-label="Tutup menu"
+            >
+              <X size={15} />
+            </button>
           </div>
-          <p className="text-center text-[9px] text-white/30 mt-2">© {new Date().getFullYear()} Alpha Project</p>
-        </div>
-      </aside>
+
+          {/* Nav */}
+          <nav className="flex-1 py-3 px-2.5 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/20">
+            {currentMenu.map((section, idx) => (
+              <div key={idx} className="mb-4 last:mb-0">
+                {section.group && (
+                  <div className="px-3 text-[9.5px] font-black uppercase tracking-[0.15em] mb-1.5 text-white/40">
+                    {section.group}
+                  </div>
+                )}
+                <div className="space-y-0.5">
+                  {section.items.map((item, itemIdx) => (
+                    <NavGroup key={itemIdx} item={item} currentPath={location.pathname} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </nav>
+
+          {/* User card di bawah sidebar */}
+          <div className="p-3 shrink-0 border-t border-white/10">
+            {user?.role === "developer" && (
+              <div className="mb-2 flex items-center justify-center gap-1.5 px-2 py-1 rounded-lg bg-amber-400/20 border border-amber-400/30">
+                <Terminal size={11} className="text-amber-300 shrink-0" />
+                <span className="text-[9px] font-black text-amber-300 tracking-widest uppercase">Dev Mode</span>
+              </div>
+            )}
+            <div className="bg-white/12 backdrop-blur-sm rounded-xl p-2.5 flex items-center gap-2.5 border border-white/15">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ${avatarClass}`}>
+                {user?.name?.charAt(0)?.toUpperCase() || "U"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-bold text-white truncate leading-snug">{user?.name || "Pengguna"}</p>
+                <p className="text-[10px] text-white/60 truncate leading-snug">{roleLabel}</p>
+              </div>
+            </div>
+            <p className="text-center text-[9px] text-white/30 mt-2">© {new Date().getFullYear()} Alpha Project</p>
+          </div>
+        </aside>
       )}
 
       {/* ── MAIN CONTENT ───────────────────────────────────── */}

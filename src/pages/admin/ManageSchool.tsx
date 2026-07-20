@@ -1,20 +1,24 @@
 import React, { useState } from "react";
 import { db } from "../../lib/db";
 import { School } from "../../types";
-import { MapPin, ShieldAlert, Navigation, Settings, Save, RefreshCw, X, Image as ImageIcon, Upload, Trash2, School as SchoolIcon, Send, Building, Printer, Eye, FileText, CheckCircle, Tv } from 'lucide-react';
+import { MapPin, ShieldAlert, Navigation, Settings, Save, RefreshCw, X, Image as ImageIcon, Upload, Trash2, School as SchoolIcon, Send, Building, Printer, Eye, FileText, CheckCircle, Tv, Clock } from 'lucide-react';
 import toast from "react-hot-toast";
 import { format } from "date-fns";
 import { useAuth } from "../../components/AuthContext";
 import { NotificationService } from "../../lib/notifications";
-import { dbRealtime } from "../../lib/firebase";
-import { ref, set } from "firebase/database";
+import { dbRealtime, getTenantRef } from "../../lib/firebase";
+import { ref, set, remove } from "firebase/database";
+import { useFirebaseData } from "../../hooks/useFirebaseData";
 import { PackageActivationCard } from "../../components/PackageActivationCard";
 import { idbStorage } from "../../lib/idbStorage";
+
 export function ManageSchool() {
   const { user } = useAuth();
-  const [school, setSchool] = useState<School>(db.getSchool());
+  const { data: schoolData, isOffline, loading } = useFirebaseData('school');
+
+  const [school, setSchool] = useState<School>(() => db.getSchool());
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState(school);
+  const [formData, setFormData] = useState<any>(() => db.getSchool());
   const [confirmClean, setConfirmClean] = useState(false);
   const [confirmFactory, setConfirmFactory] = useState(false);
 
@@ -22,7 +26,7 @@ export function ManageSchool() {
   const [kopData, setKopData] = useState(() => {
     const current = db.getSchool();
     return current.kopSurat || {
-      nama_dinas: current.nama_dinas || 'YAYASAN PENDIDIKAN DAN KEBUDAYAAN',
+      nama_dinas: current.nama_dinas || 'Nama Yayasan/Dinas Belum Diatur',
       nama_instansi: current.nama_instansi || current.name || 'SMA / SMP / KAMPUS UNGGULAN NUSANTARA',
       alamat: current.alamat || current.address || 'Jl. Pendidikan Nasional No. 1, Kota / Kabupaten, Provinsi Jawa Barat',
       telepon: current.telepon || current.phone || '021-88997766',
@@ -32,6 +36,23 @@ export function ManageSchool() {
       logo_url: current.logo_url || current.logoUrl || '',
     };
   });
+
+  React.useEffect(() => {
+    if (schoolData) {
+       setSchool(schoolData as School);
+       setFormData((prev: any) => isEditing ? prev : schoolData);
+       setKopData((prev: any) => isEditingKop ? prev : (schoolData.kopSurat || {
+          nama_dinas: schoolData.nama_dinas || 'Nama Yayasan/Dinas Belum Diatur',
+          nama_instansi: schoolData.nama_instansi || schoolData.name || 'SMA / SMP / KAMPUS UNGGULAN NUSANTARA',
+          alamat: schoolData.alamat || schoolData.address || 'Jl. Pendidikan Nasional No. 1, Kota / Kabupaten, Provinsi Jawa Barat',
+          telepon: schoolData.telepon || schoolData.phone || '021-88997766',
+          email: schoolData.email || schoolData.adminEmail || 'admin@sekolah-kampus.id',
+          website: schoolData.website || 'https://sekolah-kampus.id',
+          kode_pos: schoolData.kode_pos || '44151',
+          logo_url: schoolData.logo_url || schoolData.logoUrl || '',
+       }));
+    }
+  }, [schoolData, isEditing, isEditingKop]);
 
   const handleLogoKopUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -66,7 +87,7 @@ export function ManageSchool() {
           canvas.height = height;
           const ctx = canvas.getContext("2d");
           ctx?.drawImage(img, 0, 0, width, height);
-          
+
           const base64 = canvas.toDataURL("image/jpeg", 0.85);
           setKopData({ ...kopData, logo_url: base64 });
           toast.success("Logo instansi berhasil diunggah dan dikompresi otomatis!");
@@ -77,10 +98,11 @@ export function ManageSchool() {
     }
   };
 
-  const handleSaveKop = (e: React.FormEvent) => {
+  const handleSaveKop = async (e: React.FormEvent) => {
     e.preventDefault();
-    const currentSchool = db.getSchool();
-    const updatedSchool: School = {
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
+    const currentSchool = school;
+    const updatedSchool: any = {
       ...currentSchool,
       name: kopData.nama_instansi || currentSchool.name,
       address: kopData.alamat || currentSchool.address,
@@ -98,12 +120,9 @@ export function ManageSchool() {
         ...kopData
       }
     };
-    db.setSchool(updatedSchool);
-    setSchool(updatedSchool);
-    setFormData(updatedSchool);
+    await set(getTenantRef('school'), updatedSchool);
     setIsEditingKop(false);
     toast.success("Data Kop Surat Resmi berhasil disimpan dan diterapkan pada cetak PDF/rekapitulasi!");
-    window.dispatchEvent(new Event("school_updated"));
   };
 
   const [bgCustomData, setBgCustomData] = useState<string>(() => {
@@ -120,10 +139,10 @@ export function ManageSchool() {
           const canvas = document.createElement("canvas");
           let width = img.width;
           let height = img.height;
-          
+
           const MAX_WIDTH = 3840;
           const MAX_HEIGHT = 2160;
-          
+
           if (width > MAX_WIDTH || height > MAX_HEIGHT) {
             const widthRatio = MAX_WIDTH / width;
             const heightRatio = MAX_HEIGHT / height;
@@ -131,19 +150,19 @@ export function ManageSchool() {
             width = width * ratio;
             height = height * ratio;
           }
-          
+
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext("2d");
           ctx?.drawImage(img, 0, 0, width, height);
-          
+
           const base64 = canvas.toDataURL("image/jpeg", 0.85);
-          
+
           if (base64.length * 0.75 > 4.5 * 1024 * 1024) {
-             toast.error("Maaf, ukuran gambar terlalu besar untuk penyimpanan browser.");
-             return;
+            toast.error("Maaf, ukuran gambar terlalu besar untuk penyimpanan browser.");
+            return;
           }
-          
+
           setBgCustomData(base64);
           localStorage.setItem("login_bg_custom_data", base64);
           toast.success("Latar belakang login berhasil diterapkan!");
@@ -162,7 +181,7 @@ export function ManageSchool() {
 
   const [kioskBgData, setKioskBgData] = useState<string>(() => {
     const saved = localStorage.getItem("qr_kiosk_bg_url");
-    const schoolData = db.getSchool();
+    const schoolData: any = db.getSchool();
     return saved || schoolData.kioskBgUrl || "";
   });
 
@@ -176,10 +195,10 @@ export function ManageSchool() {
           const canvas = document.createElement("canvas");
           let width = img.width;
           let height = img.height;
-          
+
           const MAX_WIDTH = 1920;
           const MAX_HEIGHT = 1080;
-          
+
           if (width > MAX_WIDTH || height > MAX_HEIGHT) {
             const widthRatio = MAX_WIDTH / width;
             const heightRatio = MAX_HEIGHT / height;
@@ -187,28 +206,27 @@ export function ManageSchool() {
             width = width * ratio;
             height = height * ratio;
           }
-          
+
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext("2d");
           ctx?.drawImage(img, 0, 0, width, height);
-          
+
           const base64 = canvas.toDataURL("image/jpeg", 0.85);
-          
+
           if (base64.length * 0.75 > 4.5 * 1024 * 1024) {
-             toast.error("Maaf, ukuran gambar terlalu besar untuk penyimpanan browser.");
-             return;
+            toast.error("Maaf, ukuran gambar terlalu besar untuk penyimpanan browser.");
+            return;
           }
-          
+
           setKioskBgData(base64);
           localStorage.setItem("qr_kiosk_bg_url", base64);
-          const currentSchool = db.getSchool();
-          const updated = { ...currentSchool, kioskBgUrl: base64 };
-          db.updateSchool(updated);
-          setSchool(updated);
-          setFormData(updated);
+          if (!isOffline) {
+             const currentSchool = school;
+             const updated = { ...currentSchool, kioskBgUrl: base64 };
+             set(getTenantRef('school'), updated);
+          }
           window.dispatchEvent(new Event("storage"));
-          window.dispatchEvent(new Event("school_updated"));
           toast.success("Latar belakang Live TV Kiosk berhasil diunggah & diterapkan secara real-time!");
         };
         img.src = event.target?.result as string;
@@ -217,34 +235,50 @@ export function ManageSchool() {
     }
   };
 
-  const handleDeleteKioskBg = () => {
+  const handleDeleteKioskBg = async () => {
     setKioskBgData("");
     localStorage.removeItem("qr_kiosk_bg_url");
-    const currentSchool = db.getSchool();
-    const updated = { ...currentSchool, kioskBgUrl: "" };
-    db.updateSchool(updated);
-    setSchool(updated);
-    setFormData(updated);
+    if (!isOffline) {
+       const currentSchool = school;
+       const updated = { ...currentSchool, kioskBgUrl: "" };
+       await set(getTenantRef('school'), updated);
+    }
     window.dispatchEvent(new Event("storage"));
-    window.dispatchEvent(new Event("school_updated"));
     toast.success("Latar belakang Live TV Kiosk berhasil dikembalikan ke default.");
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    db.setSchool(formData);
-    setSchool(formData);
+    if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
+    await set(getTenantRef('school'), formData);
     setIsEditing(false);
     toast.success(
       "Konfigurasi instansi/sekolah/kampus berhasil disimpan!",
     );
-    // BUG-14 FIX: dispatch school_updated (not attendance_synchronized) — attendance data hasn't changed
-    window.dispatchEvent(new Event("school_updated"));
   };
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
       <PackageActivationCard />
+
+      {isOffline && (
+        <div className="bg-amber-100 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-center gap-3">
+          <div className="shrink-0">
+            <svg className="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div>
+            <p className="font-bold text-sm">Mode Luring (Offline) Aktif</p>
+            <p className="text-xs mt-0.5">Koneksi terputus. Pengaturan sekolah membutuhkan koneksi internet aktif. Form CRUD telah dikunci.</p>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center p-8 text-slate-400 font-medium">Memuat data...</div>
+      ) : (
+      <>
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
         {/* Banner */}
         <div className="bg-gradient-to-r from-[#111c2d] to-[#1d74f2] p-6 text-white flex justify-between items-center">
@@ -254,7 +288,7 @@ export function ManageSchool() {
               Profil & Lokasi Instansi / Sekolah / Kampus
             </h2>
             <p className="text-xs text-slate-300 mt-1">
-              Nama, alamat, logo, koordinat pusat, dan radius aman untuk
+              Nama, alamat, logo, koordinat pusat, and radius aman untuk
               presensi Pegawai / Guru / Dosen.
             </p>
           </div>
@@ -482,24 +516,47 @@ export function ManageSchool() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                  Batas Waktu Absen Masuk Pagi (Cutoff Alpha)
-                </label>
-                <input
-                  type="time"
-                  required
-                  value={formData.operationalCheckInLimit || "08:00"}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      operationalCheckInLimit: e.target.value,
-                    })
-                  }
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100">
+                <div>
+                  <label className="block text-[10px] font-bold text-indigo-700 uppercase mb-1 flex items-center gap-1.5">
+                    <Clock size={12} />
+                    Batas Waktu Absen Masuk Pagi (Cutoff Alpha)
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={formData.operationalCheckInLimit || "07:30"}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        operationalCheckInLimit: e.target.value,
+                      })
+                    }
+                    className="w-full px-3.5 py-2 border border-indigo-200 bg-white rounded-xl text-sm text-indigo-900 font-bold"
+                  />
+                  <p className="text-[9px] text-indigo-500 mt-1">Lewat jam ini sistem menandai terlambat / alpha otomatis.</p>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-rose-700 uppercase mb-1 flex items-center gap-1.5">
+                    <Clock size={12} />
+                    Batas Waktu Absen Pulang (Checkout)
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={formData.operationalCheckOutLimit || "15:30"}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        operationalCheckOutLimit: e.target.value,
+                      })
+                    }
+                    className="w-full px-3.5 py-2 border border-rose-200 bg-white rounded-xl text-sm text-rose-900 font-bold"
+                  />
+                  <p className="text-[9px] text-rose-500 mt-1">Jam yang berlaku untuk memulai sesi absen pulang.</p>
+                </div>
               </div>
-
-
 
               <div className="flex gap-3 pt-4 justify-end">
                 <button
@@ -529,7 +586,7 @@ export function ManageSchool() {
                     className="max-h-full max-w-full object-contain rounded-xl drop-shadow-sm"
                   />
                 </div>
-                
+
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 font-sans h-full flex flex-col justify-center">
                   <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">
                     Nama Instansi / Sekolah / Kampus
@@ -555,7 +612,7 @@ export function ManageSchool() {
                     {school.phone}
                   </p>
                 </div>
-                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 font-sans">
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 font-sans">
                   <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">
                     Email Layanan Log
                   </p>
@@ -574,6 +631,23 @@ export function ManageSchool() {
                     NIP / ID Pimpinan: {school.principalNip || "—"}
                   </p>
                 </div>
+
+                {/* TAMPILAN READ-ONLY JAM MASUK DAN JAM PULANG */}
+                <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 font-sans md:col-span-3 flex justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold text-indigo-500 uppercase mb-1 flex items-center gap-1"><Clock size={12} /> Batas Absen Masuk Pagi</p>
+                    <p className="font-black text-indigo-900 text-lg font-mono">
+                      {school.operationalCheckInLimit || "07:30"} <span className="text-[10px] font-bold text-indigo-500 font-sans uppercase">WIB</span>
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold text-rose-500 uppercase mb-1 flex items-center justify-end gap-1"><Clock size={12} /> Batas Absen Pulang</p>
+                    <p className="font-black text-rose-900 text-lg font-mono">
+                      {(school as any).operationalCheckOutLimit || "15:30"} <span className="text-[10px] font-bold text-rose-500 font-sans uppercase">WIB</span>
+                    </p>
+                  </div>
+                </div>
+
               </div>
 
               {/* GEOFENCE RADAR SIMULATOR CARD */}
@@ -639,7 +713,7 @@ export function ManageSchool() {
           {!isEditingKop && (
             <button
               onClick={() => setIsEditingKop(true)}
-              className="flex items-center justify-center gap-2 py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#10b981] to-[#059669] border border-[#34d399] shadow-[inset_0_2px_1px_rgba(255,255,255,0.4),_0_6px_15px_rgba(16,185,129,0.3)] hover:from-[#34d399] hover:to-[#10b981] transition-all duration-200"
+              className="flex items-center justify-center gap-2 py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
             >
               Ubah Data Kop Surat
             </button>
@@ -838,13 +912,13 @@ export function ManageSchool() {
                 {/* Teks Kop Tengah */}
                 <div className="flex-1 text-center space-y-0.5 font-sans">
                   <p className="text-xs sm:text-sm font-bold tracking-wide uppercase text-slate-700">
-                    {(isEditingKop ? kopData.nama_dinas : school.kopSurat?.nama_dinas) || school.nama_dinas || "YAYASAN PENDIDIKAN DAN KEBUDAYAAN"}
+                    {(isEditingKop ? kopData.nama_dinas : school.kopSurat?.nama_dinas) || school.nama_dinas || "Nama Yayasan/Dinas Belum Diatur"}
                   </p>
                   <h3 className="text-base sm:text-xl md:text-2xl font-black uppercase text-slate-900 tracking-tight leading-tight">
-                    {(isEditingKop ? kopData.nama_instansi : school.kopSurat?.nama_instansi) || school.name || "SMA / SMP / KAMPUS UNGGULAN NUSANTARA"}
+                    {(isEditingKop ? kopData.nama_instansi : school.kopSurat?.nama_instansi) || school.nama_instansi || school.name || "Nama Instansi Belum Diatur"}
                   </h3>
                   <p className="text-[11px] sm:text-xs text-slate-700 font-medium max-w-2xl mx-auto leading-snug pt-0.5">
-                    {(isEditingKop ? kopData.alamat : school.kopSurat?.alamat) || school.address || "Alamat lengkap instansi/sekolah"}
+                    {(isEditingKop ? kopData.alamat : school.kopSurat?.alamat) || school.alamat || school.address || "Alamat Belum Diatur"}
                   </p>
                   <div className="text-[10px] sm:text-[11px] text-slate-600 font-medium pt-0.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5">
                     <span><b>Telp:</b> {(isEditingKop ? kopData.telepon : school.kopSurat?.telepon) || school.phone || "—"}</span>
@@ -977,7 +1051,7 @@ export function ManageSchool() {
               <button
                 type="button"
                 onClick={() => document.getElementById("kiosk-bg-upload-input")?.click()}
-                className="flex items-center justify-center gap-2 py-2 px-5 font-bold text-white text-xs rounded-xl bg-gradient-to-b from-[#1d74f2] to-[#1156c2] border border-[#60a5fa] shadow-[inset_0_2px_1px_rgba(255,255,255,0.4),_0_4px_12px_rgba(29,116,242,0.35)] hover:from-[#3b86ff] hover:to-[#1664db] hover:-translate-y-[1px] active:translate-y-0 transition-all duration-200 cursor-pointer"
+                className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
               >
                 <Upload className="w-3.5 h-3.5" />
                 Unggah Foto Background Kiosk
@@ -1101,26 +1175,18 @@ export function ManageSchool() {
                 <button
                   type="button"
                   onClick={async () => {
-                    localStorage.removeItem('attendance');
-                    localStorage.removeItem('cuti_requests');
-                    localStorage.removeItem('kinerja_records');
-                    try {
-                      await idbStorage.clearStore('attendance_logs');
-                    } catch { /* ignore */ }
+                    if (isOffline) { toast.error("Koneksi terputus. Operasi dibatalkan."); return; }
                     try {
                       Promise.race([
                         Promise.all([
-                          set(ref(dbRealtime, 'attendance'), null),
-                          set(ref(dbRealtime, 'cuti_requests'), null),
-                          set(ref(dbRealtime, 'kinerja_records'), null),
+                          set(getTenantRef('attendance'), null),
+                          set(getTenantRef('cuti_requests'), null),
+                          set(getTenantRef('kinerja_records'), null),
                         ]),
                         new Promise((_, reject) => setTimeout(reject, 1500))
-                      ]).catch(() => {});
+                      ]).catch(() => { });
                     } catch { /* ignore */ }
                     toast.success("Database berhasil dibersihkan seperti baru!");
-                    window.dispatchEvent(new Event("attendance_synchronized"));
-                    window.dispatchEvent(new Event("cuti_updated"));
-                    window.dispatchEvent(new Event("kinerja_updated"));
                     setConfirmClean(false);
                     setTimeout(() => window.location.reload(), 500);
                   }}
@@ -1152,32 +1218,9 @@ export function ManageSchool() {
                 <button
                   type="button"
                   onClick={async () => {
-                    localStorage.clear();
-                    sessionStorage.clear();
-                    try {
-                      await idbStorage.clearAll();
-                    } catch { /* ignore */ }
-                    try {
-                      if ('caches' in window) {
-                        const cacheNames = await caches.keys();
-                        await Promise.all(cacheNames.map(name => caches.delete(name)));
-                      }
-                      if ('serviceWorker' in navigator) {
-                        const registrations = await navigator.serviceWorker.getRegistrations();
-                        await Promise.all(registrations.map(reg => reg.unregister()));
-                      }
-                    } catch { /* ignore */ }
-                    try {
-                      Promise.race([
-                        set(ref(dbRealtime, '/'), null),
-                        new Promise((_, reject) => setTimeout(reject, 1500))
-                      ]).catch(() => {});
-                    } catch { /* ignore firebase errors during factory reset */ }
-                    toast.success("Seluruh sistem berhasil disetel ulang ke setelan awal pabrik.");
+                    if (isOffline) { toast.error("Koneksi terputus. Factory Reset dibatalkan."); return; }
+                    toast.error("Factory Reset dinonaktifkan dalam mode Full Online untuk menghindari penghapusan data server publik.");
                     setConfirmFactory(false);
-                    setTimeout(() => {
-                      window.location.href = '/';
-                    }, 500);
                   }}
                   className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition cursor-pointer"
                 >
@@ -1195,6 +1238,8 @@ export function ManageSchool() {
           </div>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

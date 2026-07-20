@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { db } from "../../lib/db";
 import { useAuth } from "../../components/AuthContext";
 import { useLicense } from "../../hooks/useLicense";
+import { useGlobalSettings } from "../../hooks/useGlobalSettings";
 import { activateNewLicense, PLAN_CONFIG } from "../../lib/license";
 import { LicensePlan, DeviceSessionLog } from "../../types";
 import { useNavigate } from "react-router-dom";
@@ -40,6 +41,7 @@ export function DeveloperConsole() {
   const navigate = useNavigate();
   const school = db.getSchool();
   const { license, config, isExpired, daysRemaining } = useLicense();
+  const { settings: globalSettings, updateSettings } = useGlobalSettings();
   
   const [activeTab, setActiveTab] = useState<"license" | "activate" | "api" | "device_logs" | "kiosk_config" | "danger">("license");
   const [deviceLogs, setDeviceLogs] = useState<DeviceSessionLog[]>([]);
@@ -134,14 +136,48 @@ export function DeveloperConsole() {
     wablasServerUrl: school.wablasServerUrl || "https://smg.wablas.com",
     geminiApiKey: (school as any).geminiApiKey || localStorage.getItem('abdi_gemini_api_key') || "",
   });
+  const [demoVideoUrl, setDemoVideoUrl] = useState("");
+  
+  useEffect(() => {
+    if (globalSettings?.demo_video_url !== undefined) {
+      setDemoVideoUrl(globalSettings.demo_video_url);
+    }
+  }, [globalSettings]);
+
   const [isSavingApi, setIsSavingApi] = useState(false);
+  const [isSavingDisplay, setIsSavingDisplay] = useState(false);
+
+  const formatYouTubeUrl = (url: string): string => {
+    if (!url) return "";
+    const regex = /(?:youtube\.com\/(?:watch\?v=|live\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+    const match = url.match(regex);
+    if (match && match[1]) {
+      return `https://www.youtube.com/embed/${match[1]}`;
+    }
+    return url;
+  };
+
+  const handleSaveDisplayConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingDisplay(true);
+    try {
+      const formattedUrl = formatYouTubeUrl(demoVideoUrl);
+      setDemoVideoUrl(formattedUrl);
+      await updateSettings({ demo_video_url: formattedUrl });
+      toast.success("Konfigurasi Tampilan Berhasil Diperbarui!");
+    } catch {
+      toast.error("Gagal menyimpan konfigurasi tampilan.");
+    } finally {
+      setIsSavingDisplay(false);
+    }
+  };
 
   // Form Activation State
   const [actPlan, setActPlan] = useState<LicensePlan>("hibah");
   const [actSchoolName, setActSchoolName] = useState(school.name || "");
   const [actNotes, setActNotes] = useState("");
 
-  const handleSaveApi = (e: React.FormEvent) => {
+  const handleSaveApi = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingApi(true);
     try {
@@ -541,6 +577,7 @@ export function DeveloperConsole() {
 
       {/* Tab 3: Konfigurasi API */}
       {activeTab === "api" && (
+        <>
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden max-w-4xl">
           <div className="flex items-center gap-3 mb-6 border-b border-slate-800 pb-4">
             <ShieldAlert className="text-indigo-400" size={24} />
@@ -643,11 +680,52 @@ export function DeveloperConsole() {
                 className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-600/30 disabled:opacity-70 cursor-pointer"
               >
                 <Save size={18} />
-                {isSavingApi ? "Menyimpan..." : "Simpan Konfigurasi"}
+                {isSavingApi ? "Menyimpan..." : "Simpan Konfigurasi API"}
               </button>
             </div>
           </form>
         </div>
+
+        {/* Card Baru: Konfigurasi Tampilan */}
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden max-w-4xl mt-6">
+          <div className="flex items-center gap-3 mb-6 border-b border-slate-800 pb-4">
+            <Monitor className="text-blue-400" size={24} />
+            <div>
+              <h3 className="font-bold text-white text-lg">Konfigurasi Tampilan (Landing Page)</h3>
+              <p className="text-xs text-slate-400">Pengaturan video demo dan elemen visual Landing Page.</p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSaveDisplayConfig} className="space-y-5 relative z-10">
+            <div className="p-4 rounded-2xl bg-blue-950/40 border border-blue-500/30 space-y-2">
+              <label className="block text-xs font-black text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
+                URL Video Demo YouTube (Landing Page)
+              </label>
+              <input
+                type="text"
+                value={demoVideoUrl}
+                onChange={(e) => setDemoVideoUrl(e.target.value)}
+                className="w-full px-4 py-3 border border-blue-500/50 rounded-xl text-sm font-mono text-blue-200 bg-slate-950 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-600"
+                placeholder="Contoh: https://www.youtube.com/watch?v=..."
+              />
+              <p className="text-[11px] text-blue-300 leading-relaxed">
+                💡 URL YouTube untuk ditampilkan di Landing Page publik. Anda dapat memasukkan link YouTube biasa, dan sistem akan otomatis mengubahnya menjadi format embed. Biarkan kosong untuk menyembunyikan video.
+              </p>
+            </div>
+
+            <div className="pt-4 flex justify-end">
+              <button
+                type="submit"
+                disabled={isSavingDisplay}
+                className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/30 disabled:opacity-70 cursor-pointer"
+              >
+                <Save size={18} />
+                {isSavingDisplay ? "Menyimpan..." : "Simpan Konfigurasi Tampilan"}
+              </button>
+            </div>
+          </form>
+        </div>
+        </>
       )}
 
       {/* Tab: Log Perangkat & Sesi */}
@@ -884,7 +962,7 @@ export function DeveloperConsole() {
                 🎯 KIOSK LIVE PREVIEW (BLUR EFFECT)
               </span>
               <h4 className="text-white font-black text-lg sm:text-xl mt-2 drop-shadow-md uppercase">
-                {school.name || "SMA UNGGULAN NUSANTARA"}
+                {school.name || "Nama Instansi Belum Diatur"}
               </h4>
               <p className="text-xs text-slate-200 font-medium mt-0.5 drop-shadow">
                 Tampilan Kiosk Anda kini lebih cerah, elegan, modern, dan sangat nyaman dipindai!

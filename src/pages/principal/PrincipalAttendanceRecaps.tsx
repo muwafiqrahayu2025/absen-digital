@@ -75,7 +75,7 @@ export function PrincipalAttendanceRecaps() {
 
         doc.setFontSize(10);
         doc.setFont("helvetica", "bold");
-        doc.text((kop.nama_dinas || school?.nama_dinas || "YAYASAN PENDIDIKAN DAN KEBUDAYAAN").toUpperCase(), textStartX, startY);
+        doc.text((kop.nama_dinas || school?.nama_dinas || "Nama Yayasan/Dinas Belum Diatur").toUpperCase(), textStartX, startY);
         
         doc.setFontSize(14);
         doc.text((kop.nama_instansi || school?.nama_instansi || school?.name || "INSTANSI PENDIDIKAN UNGGULAN").toUpperCase(), textStartX, startY + 6);
@@ -133,7 +133,7 @@ export function PrincipalAttendanceRecaps() {
             index + 1,
             `${usr.nip || "-"}`,
             usr.name,
-            usr.opd || "Dinas / Yayasan / Rektorat",
+            usr.opd || "-",
             usr.jabatan || "Guru Utama",
             masukH || "0",
             masukS || "0",
@@ -248,7 +248,7 @@ export function PrincipalAttendanceRecaps() {
         No: index + 1,
         "ID Pegawai / NIP / NIDN / NIK": usr.nip || "-",
         "Nama Pegawai / Guru / Dosen": usr.name,
-        Lembaga: usr.opd || "Dinas / Yayasan / Rektorat",
+        Lembaga: usr.opd || "-",
         Jabatan: usr.jabatan || "Pegawai / Guru / Dosen",
         "Masuk (Hadir)": masukH,
         "Masuk (Sakit)": masukS,
@@ -294,7 +294,7 @@ export function PrincipalAttendanceRecaps() {
       <div className="bg-white rounded-3xl border border-slate-200 p-6">
         <div className="grid grid-cols-[165px_1fr] gap-y-3 gap-x-2 text-xs text-slate-650 font-mono uppercase">
           <div className="font-bold">Lembaga / Instansi Induk</div>
-          <div>: {school?.name ? (school.name.includes(" / ") ? "Dinas / Yayasan / Rektorat" : school.name) : "Dinas / Yayasan / Rektorat / Instansi"}</div>
+          <div>: {school?.kopSurat?.nama_dinas || school?.nama_dinas || "Nama Yayasan/Dinas Belum Diatur"}</div>
 
           <div className="font-bold">Tahun Ajaran</div>
           <div>

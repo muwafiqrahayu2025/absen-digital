@@ -1,26 +1,36 @@
 <!doctype html>
 <html lang="id">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#4f46e5">
-    <meta name="description" content="ABDI Absen Digital: Aplikasi absensi digital yang mendukung sistem multi-online (pusat & cabang). Online, semi-online, dan Android.">
-    <meta property="og:title" content="ABDI Absen Digital — Sistem Multi-Online (Pusat & Cabang)">
-    <meta property="og:description" content="Aplikasi absensi digital terpadu mendukung sistem online web, semi-online sinkronisasi offline, dan aplikasi Android.">
-    <meta property="og:type" content="website">
-    <link rel="apple-touch-icon" href="/logo.png" sizes="512x512">
-    <title>ABDI Absen Digital — Sistem Multi-Online (Pusat & Cabang)</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-    <script>
-      window.addEventListener('error', function(e) {
-        document.body.innerHTML += '<div style="position:fixed;top:0;left:0;right:0;background:red;color:white;padding:20px;z-index:999999;font-family:monospace;white-space:pre-wrap;">FATAL ERROR:<br/>' + e.message + '<br/><br/>' + e.filename + ':' + e.lineno + '<br/><br/>' + (e.error && e.error.stack ? e.error.stack : '') + '</div>';
-      });
-      window.addEventListener('unhandledrejection', function(e) {
-        document.body.innerHTML += '<div style="position:fixed;top:0;left:0;right:0;background:red;color:white;padding:20px;z-index:999999;font-family:monospace;white-space:pre-wrap;">UNHANDLED PROMISE REJECTION:<br/>' + e.reason + '</div>';
-      });
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="description"
+    content="ABDI Absen Digital: Aplikasi absensi digital yang mendukung sistem multi-online (pusat & cabang). Online, semi-online, dan Android.">
+  <meta property="og:title" content="ABDI Absen Digital — Sistem Multi-Online (Pusat & Cabang)">
+  <meta property="og:description"
+    content="Aplikasi absensi digital terpadu mendukung sistem online web, semi-online sinkronisasi offline, dan aplikasi Android.">
+  <meta property="og:type" content="website">
+  <link rel="apple-touch-icon" href="/logo.png" sizes="512x512">
+  <title>ABDI Absen Digital — Sistem Multi-Online (Pusat & Cabang)</title>
+
+  <!-- Script Midtrans Snap (Sandbox Mode) -->
+  <script type="text/javascript" src="https://app.sandbox.midtrans.com/snap/snap.js"
+    data-client-key="Mid-client-QTjU_6j_N1-oy1-f">
     </script>
-  </body>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+  <script>
+    window.addEventListener('error', function (e) {
+      document.body.innerHTML += '<div style="position:fixed;top:0;left:0;right:0;background:red;color:white;padding:20px;z-index:999999;font-family:monospace;white-space:pre-wrap;">FATAL ERROR:<br/>' + e.message + '<br/><br/>' + e.filename + ':' + e.lineno + '<br/><br/>' + (e.error && e.error.stack ? e.error.stack : '') + '</div>';
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      document.body.innerHTML += '<div style="position:fixed;top:0;left:0;right:0;background:red;color:white;padding:20px;z-index:999999;font-family:monospace;white-space:pre-wrap;">UNHANDLED PROMISE REJECTION:<br/>' + e.reason + '</div>';
+    });
+  </script>
+</body>
+
 </html>

@@ -30,3 +30,36 @@ isSupported().then((supported) => {
     analytics = getAnalytics(app);
   }
 });
+
+// ─── HELPER MULTI-TENANT ───────────────────────────────────────────
+import { ref, DatabaseReference } from "firebase/database";
+
+export function getTenantPath(path: string = ''): string {
+  // Biarkan path global tidak tersentuh
+  if (path.startsWith('user_tenant_mapping') || path.startsWith('global_')) {
+    return path;
+  }
+  
+  const tenantId = localStorage.getItem("abdi_active_tenant_id");
+  
+  // Jika tidak ada tenantId (belum login) atau merupakan Super Admin GLOBAL,
+  // idealnya mereka tidak boleh menulis ke root (kecuali admin).
+  if (!tenantId || tenantId === 'GLOBAL') {
+    return path; 
+  }
+  
+  // Jika path sudah memiliki format tenants/xxx, jangan double prefix
+  if (path.startsWith('tenants/')) {
+    return path;
+  }
+
+  return path ? `tenants/${tenantId}/${path}` : `tenants/${tenantId}`;
+}
+
+/**
+ * Pengganti ref(dbRealtime, path) yang secara otomatis akan menambahkan 
+ * prefix tenants/$tenantId/ ke dalam path.
+ */
+export function getTenantRef(path: string = ''): DatabaseReference {
+  return ref(dbRealtime, getTenantPath(path));
+}

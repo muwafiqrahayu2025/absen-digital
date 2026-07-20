@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { idbStorage } from '../lib/idbStorage';
 import { db } from '../lib/db';
 import { ref, get, child } from 'firebase/database';
-import { dbRealtime } from '../lib/firebase';
+import { dbRealtime, getTenantRef } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 
 export function DeviceRegistrationModal() {
@@ -73,7 +73,7 @@ export function DeviceRegistrationModal() {
 
       // Tarik master data terbaru dari Cloud Server
       try {
-        const dbRef = ref(dbRealtime);
+        const dbRef = getTenantRef();
         const snap = await get(child(dbRef, '/'));
         if (snap.exists()) {
           const cloudData = snap.val();

@@ -56,7 +56,7 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
   const [formData, setFormData] = useState({
     name: user?.name || "",
     nip: user?.nip || "",
-    opd: user?.opd || "DINAS / YAYASAN / INSTANSI",
+    opd: user?.opd || "-",
     satker:
       user?.satuanKerja ||
       (user as any)?.satker ||
@@ -203,7 +203,7 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
           <div className="w-full border-t border-gray-100 mt-4 pt-3 space-y-2 text-left text-[11px] text-gray-500">
             <div className="flex items-center gap-2">
               <Building size={13} className="text-gray-400 shrink-0" />
-              <span className="truncate">{user?.opd || "DINAS / YAYASAN / INSTANSI"}</span>
+              <span className="truncate">{user?.opd || "-"}</span>
             </div>
             <div className="flex items-center gap-2">
               <Award size={13} className="text-gray-400 shrink-0" />

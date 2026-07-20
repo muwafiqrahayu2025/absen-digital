@@ -13,8 +13,8 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   // Jika di Render, baca dari Environment Variable
   serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 } else {
-  // Jika di localhost, baca file lokal (naik satu folder)
-  serviceAccount = require("../serviceAccountKey.json");
+  // Jika di localhost, baca file lokal
+  serviceAccount = require("./serviceAccountKey.json");
 }
 
 initializeApp({
@@ -120,12 +120,8 @@ app.post("/api/submitAttendance", authenticateUser, async (req, res) => {
   }
 });
 
-// Start Server (Lokal) atau Export (Vercel)
-if (process.env.NODE_ENV !== "production") {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`Server Absensi Digital berjalan di http://localhost:${PORT}`);
-  });
-}
-
-module.exports = app;
+// Start Server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server Absensi Digital berjalan di http://localhost:${PORT}`);
+});
