@@ -220,6 +220,11 @@ export function ManageUsers() {
   const handleOpdSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
+    const tenantId = localStorage.getItem("abdi_active_tenant_id");
+    if (!tenantId || tenantId === 'undefined' || tenantId === 'null') {
+      toast.error("Error: Data Sekolah (tenantId) tidak valid! Silakan relogin.");
+      return;
+    }
     const singkatan = (opdForm.singkatan || opdForm.nama).toUpperCase();
     const nama = opdForm.nama.toUpperCase();
     const id = editingOpd ? editingOpd.id : String(Date.now());
@@ -245,6 +250,11 @@ export function ManageUsers() {
   const handleSatkerSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
+    const tenantId = localStorage.getItem("abdi_active_tenant_id");
+    if (!tenantId || tenantId === 'undefined' || tenantId === 'null') {
+      toast.error("Error: Data Sekolah (tenantId) tidak valid! Silakan relogin.");
+      return;
+    }
     const singkatan = (satkerForm.singkatan || satkerForm.nama).toUpperCase();
     const nama = satkerForm.nama.toUpperCase();
     const id = editingSatker ? editingSatker.id : String(Date.now());

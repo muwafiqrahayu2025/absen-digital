@@ -100,12 +100,12 @@
         "opds": {
           // Semua anggota tenant bisa READ (guru butuh data ini untuk dropdown profil)
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-          // Hanya Admin yang bisa tambah/ubah/hapus
-          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
+          // Hanya Admin yang bisa tambah/ubah/hapus (BYPASS untuk Akun Demo)
+          ".write": "auth != null && (auth.token.email === 'admin@demo.com' || auth.token.email === 'alpha@demo.com' || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'))",
           ".indexOn": ["singkatan", "nama"],
           "$opdId": {
             ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-            ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'"
+            ".write": "auth != null && (auth.token.email === 'admin@demo.com' || auth.token.email === 'alpha@demo.com' || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'))"
           }
         },
 
@@ -115,11 +115,11 @@
         // ════════════════════════════════════════════════════════════
         "satuanKerjas": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
+          ".write": "auth != null && (auth.token.email === 'admin@demo.com' || auth.token.email === 'alpha@demo.com' || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'))",
           ".indexOn": ["singkatan", "nama", "opdId"],
           "$satkerId": {
             ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-            ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'"
+            ".write": "auth != null && (auth.token.email === 'admin@demo.com' || auth.token.email === 'alpha@demo.com' || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'))"
           }
         },
 
@@ -131,10 +131,10 @@
         // ════════════════════════════════════════════════════════════
         "satuankerja": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
+          ".write": "auth != null && (auth.token.email === 'admin@demo.com' || auth.token.email === 'alpha@demo.com' || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'))",
           "$satkerId": {
             ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-            ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'"
+            ".write": "auth != null && (auth.token.email === 'admin@demo.com' || auth.token.email === 'alpha@demo.com' || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'))"
           }
         },
 
