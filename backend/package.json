@@ -21,5 +21,11 @@
   },
   "devDependencies": {
     "axios": "^1.18.1"
+  },
+  "overrides": {
+    "firebase-admin": {
+      "jose": "4.15.5"
+    },
+    "jose": "4.15.5"
   }
 }
