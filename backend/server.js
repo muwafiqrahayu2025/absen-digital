@@ -60,21 +60,19 @@ const ALLOWED_ORIGINS  = (process.env.ALLOWED_ORIGINS ?? "http://localhost:3000,
   .map(s => s.trim())
   .filter(Boolean);
 
-// ── Validasi wajib saat startup ──────────────────────────────────────────────
+// ── Validasi saat startup ──────────────────────────────────────────────────
 if (!ENCRYPTION_SECRET || ENCRYPTION_SECRET.length < 32) {
-  console.error(
-    "[ABDI Server] ⛔ ENCRYPTION_SECRET tidak diset atau terlalu pendek!\n" +
-    "   Jalankan: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"\n" +
-    "   lalu set hasilnya sebagai ENCRYPTION_SECRET di backend/.env"
+  console.warn(
+    "[ABDI Server] ⚠️ ENCRYPTION_SECRET belum diset atau kurang dari 32 karakter!\n" +
+    "   Enkripsi server-side tidak akan aktif sampai variabel ini dikonfigurasi di environment."
   );
-  process.exit(1);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FIREBASE ADMIN SDK — INISIALISASI
 // ─────────────────────────────────────────────────────────────────────────────
 
-let serviceAccount;
+let serviceAccount = null;
 
 if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
   // ── Production: baca dari environment variable (Base64 string) ───────────
@@ -82,33 +80,51 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
     const decodedStr = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8');
     serviceAccount = JSON.parse(decodedStr);
   } catch (e) {
-    console.error("[ABDI Server] ⛔ FIREBASE_SERVICE_ACCOUNT_BASE64 gagal diparsing:", e.message);
-    process.exit(1);
+    console.error("[ABDI Server] ⚠️ FIREBASE_SERVICE_ACCOUNT_BASE64 gagal diparsing:", e.message);
+  }
+} else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  // ── Production: baca dari environment variable (JSON string) ─────────────
+  try {
+    serviceAccount = typeof process.env.FIREBASE_SERVICE_ACCOUNT === 'string'
+      ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+      : process.env.FIREBASE_SERVICE_ACCOUNT;
+  } catch (e) {
+    console.error("[ABDI Server] ⚠️ FIREBASE_SERVICE_ACCOUNT gagal diparsing:", e.message);
   }
 } else {
   // ── Local Dev: baca dari file serviceAccountKey.json ────────────────────
   const saKeyPath = path.join(__dirname, "serviceAccountKey.json");
-  if (!fs.existsSync(saKeyPath)) {
-    console.error(
-      "[ABDI Server] ⛔ serviceAccountKey.json tidak ditemukan di:", saKeyPath,
-      "\n   Download dari: Firebase Console → Project Settings → Service Accounts → Generate new private key",
-      "\n   PENTING: File ini sudah didaftarkan di .gitignore — jangan commit!"
+  if (fs.existsSync(saKeyPath)) {
+    try {
+      serviceAccount = require(saKeyPath);
+    } catch (e) {
+      console.error("[ABDI Server] ⚠️ Gagal membaca serviceAccountKey.json:", e.message);
+    }
+  } else {
+    console.warn(
+      "[ABDI Server] ⚠️ serviceAccountKey.json tidak ditemukan dan env FIREBASE_SERVICE_ACCOUNT tidak diset."
     );
-    process.exit(1);
   }
-  serviceAccount = require(saKeyPath);
 }
 
-// Cegah duplikasi inisialisasi (penting saat hot-reload)
-if (getApps().length === 0) {
-  initializeApp({
-    credential: cert(serviceAccount),
-    databaseURL: FIREBASE_DB_URL,
-  });
-}
+// Cegah duplikasi inisialisasi (penting saat hot-reload & serverless reuse)
+let adminDb = null;
+let adminAuth = null;
 
-const adminDb   = getDatabase();
-const adminAuth = getAuth();
+if (serviceAccount) {
+  try {
+    if (getApps().length === 0) {
+      initializeApp({
+        credential: cert(serviceAccount),
+        databaseURL: FIREBASE_DB_URL,
+      });
+    }
+    adminDb   = getDatabase();
+    adminAuth = getAuth();
+  } catch (err) {
+    console.error("[ABDI Server] ⚠️ Firebase Admin init error:", err.message);
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ENKRIPSI — AES-256-GCM (Server-Side Only)
@@ -323,6 +339,13 @@ const encryptLimiter = rateLimit({
  * Setelah middleware ini, req.user berisi decoded token (uid, email, dll.)
  */
 const authenticateUser = async (req, res, next) => {
+  if (!adminAuth) {
+    return res.status(503).json({
+      error: "service-unavailable",
+      message: "Firebase Auth Admin belum terkonfigurasi di server.",
+    });
+  }
+
   const authHeader = req.headers.authorization ?? "";
 
   if (!authHeader.startsWith("Bearer ")) {
@@ -358,6 +381,10 @@ const authenticateUser = async (req, res, next) => {
  * Ini mencegah user satu sekolah mengakses data sekolah lain.
  */
 async function verifyTenantMembership(uid, tenantId) {
+  if (!adminDb) {
+    return { authorized: false, role: null };
+  }
+
   const [mappingSnap, userSnap] = await Promise.all([
     adminDb.ref(`user_tenant_mapping/${uid}`).once("value"),
     adminDb.ref(`tenants/${tenantId}/users/${uid}/role`).once("value"),
@@ -379,16 +406,25 @@ async function verifyTenantMembership(uid, tenantId) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.get("/api/health", (req, res) => {
+  const isEncryptionReady = Boolean(ENCRYPTION_SECRET && ENCRYPTION_SECRET.length >= 32);
+  const isFirebaseReady = Boolean(adminDb && adminAuth);
+  const isHealthy = isEncryptionReady && isFirebaseReady;
+
   res.json({
-    status: "ok",
+    status: isHealthy ? "ok" : "degraded",
     service: "ABDI Backend",
     version: "3.0.0",
     timestamp: new Date().toISOString(),
+    environment: process.env.VERCEL ? "vercel-serverless" : "standalone",
     encryption: {
       algorithm: ALGORITHM,
       pbkdf2Iterations: PBKDF2_ITER,
       keyLength: PBKDF2_KEYLEN,
-      secretConfigured: ENCRYPTION_SECRET.length >= 32,
+      secretConfigured: isEncryptionReady,
+    },
+    firebaseAdmin: {
+      configured: isFirebaseReady,
+      databaseUrl: FIREBASE_DB_URL,
     },
     rateLimit: {
       windowSeconds: windowMs / 1000,
@@ -420,6 +456,13 @@ const authLimiter = rateLimit({
  * OTP TIDAK PERNAH dikembalikan ke client response.
  */
 app.post("/api/auth/otp/send", authLimiter, async (req, res) => {
+  if (!adminDb) {
+    return res.status(503).json({
+      error: "service-unavailable",
+      message: "Firebase Realtime Database Admin belum terkonfigurasi di server.",
+    });
+  }
+
   const { phone, userId, tenantId, purpose } = req.body ?? {};
 
   if (!phone || !userId) {
@@ -461,6 +504,13 @@ app.post("/api/auth/otp/send", authLimiter, async (req, res) => {
  * Request verifikasi OTP (server-side verification).
  */
 app.post("/api/auth/otp/verify", authLimiter, async (req, res) => {
+  if (!adminDb) {
+    return res.status(503).json({
+      error: "service-unavailable",
+      message: "Firebase Realtime Database Admin belum terkonfigurasi di server.",
+    });
+  }
+
   const { userId, otp } = req.body ?? {};
 
   if (!userId || !otp) {
@@ -820,13 +870,15 @@ app.post("/api/attendance/pending-photo", attendanceLimiter, authenticateUser, a
 // START SERVER
 // ─────────────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
-  console.log("╔══════════════════════════════════════════════════════╗");
-  console.log("║  ABDI Backend Server                                  ║");
-  console.log(`║  URL    : http://localhost:${PORT}                      ║`);
-  console.log(`║  Enkripsi: ${ALGORITHM} + PBKDF2 (${PBKDF2_ITER.toLocaleString()} iter) ║`);
-  console.log(`║  CORS   : ${ALLOWED_ORIGINS.join(", ")}   ║`);
-  console.log("╚══════════════════════════════════════════════════════╝");
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log("╔══════════════════════════════════════════════════════╗");
+    console.log("║  ABDI Backend Server                                  ║");
+    console.log(`║  URL    : http://localhost:${PORT}                      ║`);
+    console.log(`║  Enkripsi: ${ALGORITHM} + PBKDF2 (${PBKDF2_ITER.toLocaleString()} iter) ║`);
+    console.log(`║  CORS   : ${ALLOWED_ORIGINS.join(", ")}   ║`);
+    console.log("╚══════════════════════════════════════════════════════╝");
+  });
+}
 
-module.exports = app; // Untuk testing
+module.exports = app;
