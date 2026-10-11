@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../components/AuthContext";
 import { useEditMode } from '../components/EditModeContext';
 import { useGlobalStore } from '../lib/store';
@@ -17,7 +17,8 @@ import {
   endOfMonth,
 } from "date-fns";
 import { id } from "date-fns/locale";
-import { Users, FileText, CheckCircle, Clock, Download, Building, Layers, Briefcase, AlertTriangle, MapPin, Smartphone, Calendar, FileSpreadsheet, Send, HelpCircle, Award, ChevronRight, Menu, Bell, Search, BookOpen, Filter, CheckCircle2, XCircle, Moon, Sun, UserCheck, LayoutDashboard, Save, X, Plus, QrCode, UserCircle, BarChart2, ScanLine } from 'lucide-react';
+import { Users, FileText, CheckCircle, Clock, Download, Building, Layers, Briefcase, AlertTriangle, MapPin, Smartphone, Calendar, FileSpreadsheet, Send, HelpCircle, Award, ChevronRight, Menu, Bell, Search, BookOpen, Filter, CheckCircle2, XCircle, Moon, Sun, UserCheck, LayoutDashboard, Save, X, Plus, QrCode, UserCircle, BarChart2, ScanLine, Settings, LogOut, History, Camera, CalendarDays, AlertCircle, RefreshCw, LayoutGrid, List, KeyRound, Lock, FileSignature, PlayCircle, Fingerprint, Info } from 'lucide-react';
+
 import {
   BarChart,
   Bar,
@@ -34,19 +35,86 @@ import { ProfileTabContent } from "../components/ProfileTabContent";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useFirebaseSync } from "../hooks/useFirebaseSync";
 import { useFirebaseData } from "../hooks/useFirebaseData";
+import { useFirebaseQuery } from "../hooks/useFirebaseQuery";
 import { useGlobalSettings } from "../hooks/useGlobalSettings";
+import { useLicense } from "../hooks/useLicense";
+import { useRealtimeNotifications } from "../hooks/useRealtimeNotifications";
+import { collection, onSnapshot } from "firebase/firestore";
+import { db as firestoreDb } from "../lib/firebase";
+// -- Helper Component for Banners --
+function DashboardBanners({ 
+  tenantId, 
+  license, 
+  daysRemaining, 
+  isExpired,
+  userRole 
+}: { 
+  tenantId?: string | null; 
+  license: any; 
+  daysRemaining: number; 
+  isExpired: boolean; 
+  userRole?: string;
+}) {
+  const showTrial = license.plan === 'trial' && !isExpired && userRole !== 'developer';
+  const showExpired = isExpired;
+
+  if (!showTrial && !showExpired) return null;
+
+  return (
+    <div className="space-y-4 mb-6">
+      {/* 2. Trial Banner */}
+      {showTrial && (
+        <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-3xl p-5 md:p-6 shadow-lg relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="bg-white/20 p-3 rounded-2xl hidden sm:block">
+              <Clock size={32} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg md:text-xl font-black mb-1">Masa Uji Coba (Trial) Aktif</h3>
+              <p className="text-sm text-amber-100 font-medium">
+                Sisa waktu evaluasi Anda: <strong className="text-white bg-black/20 px-2 py-0.5 rounded-md mx-1">{daysRemaining} Hari</strong>
+                Sebagian fitur lanjutan dikunci selama masa evaluasi.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Expired License Banner */}
+      {showExpired && (
+        <div className="bg-gradient-to-r from-rose-600 to-red-600 text-white rounded-3xl p-5 shadow-lg flex items-start gap-4 animate-pulse-slow">
+          <AlertTriangle size={32} className="shrink-0 text-rose-200" />
+          <div>
+            <h3 className="text-lg font-black">Lisensi Berakhir</h3>
+            <p className="text-sm font-medium mt-1">Paket langganan Anda telah habis. Akses ke fungsionalitas utama dibatasi. Hubungi administrator sistem untuk perpanjangan.</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Dashboard() {
   useDocumentTitle("Dasbor Eksekutif");
   const { user, logout } = useAuth();
-  const { data: schoolData, isOffline: isOfflineSchool } = useFirebaseData('school');
-  const { data: usersData, isOffline: isOfflineUsers } = useFirebaseData('users');
-  const { data: attendanceData } = useFirebaseData('attendance');
+  const navigate = useNavigate();
+  const { permission, showSoftPrompt, requestPermission, dismissPrompt } = useRealtimeNotifications();
+  const { license, isExpired, daysRemaining } = useLicense();
+  const currentMonthStart = format(new Date(), "yyyy-MM") + "-01";
+  const currentMonthEnd = format(new Date(), "yyyy-MM") + "-31";
+
+  const { data: schoolData, isOffline: isOfflineSchool, loading: schoolLoading } = useFirebaseData('school');
+  const { data: usersData, isOffline: isOfflineUsers, loading: usersLoading } = useFirebaseData('users');
+  const { data: attendanceData, loading: attLoading } = useFirebaseQuery('attendance', {
+    orderByChild: 'date',
+    startAt: currentMonthStart,
+    endAt: currentMonthEnd
+  });
   const { data: opdsData } = useFirebaseData('opds');
   const { data: satuanKerjasData } = useFirebaseData('satuankerja');
   const { data: jabatansData } = useFirebaseData('jabatans');
-  const { data: cutiRequestsData } = useFirebaseData('cuti_requests');
-  const { data: kinerjasData } = useFirebaseData('kinerjas');
+  const { data: cutiRequestsData, loading: cutiLoading } = useFirebaseQuery('cuti_requests', { limitToLast: 50 });
+  const { data: kinerjasData, loading: kinerjaLoading } = useFirebaseQuery('kinerjas', { limitToLast: 50 });
 
   const [school, setSchool] = useState<any>({});
   const [users, setUsers] = useState<any[]>([]);
@@ -57,10 +125,30 @@ export function Dashboard() {
   const [cutiRequests, setCutiRequests] = useState<any[]>([]);
   const [kinerjas, setKinerjas] = useState<any[]>([]);
 
+  // --- Global Monitoring State (Developer Only) ---
+  const [globalStats, setGlobalStats] = useState<any>(null);
+  const [globalLoading, setGlobalLoading] = useState(false);
+  const [isGlobalUserModalOpen, setIsGlobalUserModalOpen] = useState(false);
+  const [isWaConfigModalOpen, setIsWaConfigModalOpen] = useState(false);
+  const [isDbStatusModalOpen, setIsDbStatusModalOpen] = useState(false);
+
+  // Firestore Metrics State
+  const [fsTenantsCount, setFsTenantsCount] = useState<number>(0);
+  const [fsKiosksCount, setFsKiosksCount] = useState<number>(0);
+  const [fsLogsCount, setFsLogsCount] = useState<number>(0);
+  const [fsLogsData, setFsLogsData] = useState<any[]>([]);
+  const [fsStatsLoading, setFsStatsLoading] = useState<boolean>(true);
+
+  // [FIX Component 2] Memecah useEffect raksasa untuk mencegah state leakage & re-render cascades
   useEffect(() => {
     if (schoolData) setSchool(schoolData);
+  }, [schoolData]);
+
+  useEffect(() => {
     if (usersData) setUsers(Object.values(usersData));
-    
+  }, [usersData]);
+
+  useEffect(() => {
     if (attendanceData) {
       const cloudAtt = Object.values(attendanceData) as any[];
       const localAtt = db.getAttendance().filter((a: any) => !a.isSynced);
@@ -74,25 +162,150 @@ export function Dashboard() {
     } else {
       setAttendance(db.getAttendance());
     }
+  }, [attendanceData]);
 
+  useEffect(() => {
     if (opdsData) setOpds(Object.values(opdsData));
+  }, [opdsData]);
+
+  useEffect(() => {
     if (satuanKerjasData) setSatuanKerjas(Object.values(satuanKerjasData));
+  }, [satuanKerjasData]);
+
+  useEffect(() => {
     if (jabatansData) setJabatans(Object.values(jabatansData));
+  }, [jabatansData]);
+
+  useEffect(() => {
     if (cutiRequestsData) setCutiRequests(Object.values(cutiRequestsData));
+  }, [cutiRequestsData]);
+
+  useEffect(() => {
     if (kinerjasData) setKinerjas(Object.values(kinerjasData));
-  }, [schoolData, usersData, attendanceData, opdsData, satuanKerjasData, jabatansData, cutiRequestsData, kinerjasData]);
+  }, [kinerjasData]);
+
+  useEffect(() => {
+    if (user?.role !== 'developer' && user?.tenantId !== 'GLOBAL') return;
+    let isMounted = true;
+    
+    const fetchGlobalData = async () => {
+      setGlobalLoading(true);
+      try {
+        const { ref, get } = await import('firebase/database');
+        const { dbRealtime } = await import('../lib/firebase');
+        
+        const [tenantsSnap, mappingSnap, settingsSnap] = await Promise.all([
+          get(ref(dbRealtime, 'tenants')),
+          get(ref(dbRealtime, 'user_tenant_mapping')),
+          get(ref(dbRealtime, 'global_settings'))
+        ]);
+        
+        if (!isMounted) return;
+        
+        const tenantsData = tenantsSnap.exists() ? tenantsSnap.val() : {};
+        const mappingData = mappingSnap.exists() ? mappingSnap.val() : {};
+        const settingsData = settingsSnap.exists() ? settingsSnap.val() : {};
+        
+        const tenantsArr = Object.entries(tenantsData).map(([id, data]: [string, any]) => ({
+          id,
+          ...data
+        })).sort((a: any, b: any) => {
+          const dateA = a.school?.createdAt || a.createdAt || 0;
+          const dateB = b.school?.createdAt || b.createdAt || 0;
+          return new Date(dateB).getTime() - new Date(dateA).getTime();
+        });
+        
+        setGlobalStats({
+          totalTenants: tenantsArr.length,
+          totalUsers: Object.keys(mappingData).length,
+          settings: settingsData,
+          tenants: tenantsArr
+        });
+      } catch (err) {
+        console.error("Failed to fetch global monitoring data:", err);
+      } finally {
+        if (isMounted) setGlobalLoading(false);
+      }
+    };
+    
+    fetchGlobalData();
+    
+    return () => { isMounted = false; };
+  }, [user]);
+
+  // Firestore Listeners untuk Metrik Kiosk, Tenant, dan Logs
+  useEffect(() => {
+    if (user?.role !== 'developer' && user?.tenantId !== 'GLOBAL') return;
+    
+    setFsStatsLoading(true);
+    
+    // tenants data is already fetched via fetchGlobalData into globalStats
+    // We only need to fetch kiosks
+    setFsStatsLoading(false);
+
+    const unsubKiosks = onSnapshot(collection(firestoreDb, "kiosks"), (snapshot) => {
+      let activeCount = 0;
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (data.status === 'active' || data.status === 'Aktif') activeCount++;
+      });
+      setFsKiosksCount(activeCount);
+    }, (error) => console.error("Firestore kiosks error:", error));
+
+    const unsubLogs = onSnapshot(collection(firestoreDb, "audit_logs"), (snapshot) => {
+      setFsLogsCount(snapshot.size);
+      const logs: any[] = [];
+      snapshot.forEach(doc => {
+        logs.push({ id: doc.id, ...doc.data() });
+      });
+      setFsLogsData(logs);
+    }, (error) => console.error("Firestore audit_logs error:", error));
+
+    return () => {
+      unsubKiosks();
+      unsubLogs();
+    };
+  }, [user]);
 
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [broadcastSending, setBroadcastSending] = useState(false);
+
+  // Group logs data by date for chart
+  const activityChartData = useMemo(() => {
+    const countsByDate: Record<string, number> = {};
+    fsLogsData.forEach(log => {
+      let d: Date | null = null;
+      if (log.timestamp?.toDate) d = log.timestamp.toDate();
+      else if (log.createdAt?.toDate) d = log.createdAt.toDate();
+      else if (log.date) d = new Date(log.date);
+      else if (log.timestamp) d = new Date(log.timestamp);
+      
+      if (d && !isNaN(d.getTime())) {
+        const dateStr = format(d, "dd MMM", { locale: id });
+        countsByDate[dateStr] = (countsByDate[dateStr] || 0) + 1;
+      }
+    });
+
+    const result = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = subDays(new Date(), i);
+      const dateStr = format(d, "dd MMM", { locale: id });
+      result.push({
+        date: dateStr,
+        aktivitas: countsByDate[dateStr] || 0
+      });
+    }
+    return result;
+  }, [fsLogsData]);
 
   const [scanStep, setScanStep] = useState(1);
   const [pendingQrData, setPendingQrData] = useState<{ decodedText: string, method: string } | null>(null);
 
   const leaderboard = useMemo(() => {
     const currentMonth = format(new Date(), "yyyy-MM");
-    const monthAttendance = attendance.filter(a => a.date && a.date.startsWith(currentMonth));
+    const monthAttendance = attendance?.filter(a => a.date && a.date.startsWith(currentMonth)) || [];
 
-    const scores = users.filter(u => u.role !== 'admin').map(u => {
+    const scores = users.filter(u => !['admin', 'kepala_sekolah', 'developer'].includes(u.role)).map(u => {
       const userAtt = monthAttendance.filter(a => a.userId === u.id);
       let score = 0;
       userAtt.forEach(a => {
@@ -113,10 +326,10 @@ export function Dashboard() {
       return;
     }
 
-    const currentSchool = db.getSchool();
+    const currentSchool = school || { radius: 120, latitude: 0, longitude: 0 };
     const hasNotifApi = !!(currentSchool.gasWebAppUrl || currentSchool.whatsappApiKey);
     
-    const teachers = users.filter(u => u.role !== 'admin');
+    const teachers = users.filter(u => !['admin', 'kepala_sekolah', 'developer'].includes(u.role));
     
     if (!hasNotifApi) {
       if (!globalSettingsLoading && globalSettings.wa_fallback_enabled) {
@@ -143,7 +356,7 @@ export function Dashboard() {
 
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    if (user && user.role !== 'admin') {
+    if (user && !['admin', 'kepala_sekolah', 'developer'].includes(user.role)) {
       const todayStr = format(new Date(), "yyyy-MM-dd");
       const hasCheckedIn = db.getAttendance().some(a => a.date === todayStr && a.userId === user.id);
       const reminderKey = `reminder_sent_${todayStr}_${user.id}`;
@@ -179,11 +392,18 @@ export function Dashboard() {
   const hasOut = !!todayRec?.checkOutTime;
 
   // DI SINI SUDAH KITA SAMBUNGKAN KE DATABASE UI
-  const checkInLimitRaw = school.operationalCheckInLimit || "07:00";
-  const checkOutLimitRaw = (school as any).operationalCheckOutLimit || "15:30";
+  const checkInLimitRaw = school.operationalCheckInLimit;
+  const checkOutLimitRaw = (school as any).operationalCheckOutLimit;
 
-  const checkInLimitFull = checkInLimitRaw.length === 5 ? checkInLimitRaw + ":00" : checkInLimitRaw;
-  const isLate = hasIn ? todayRec!.checkInTime! > checkInLimitFull : false;
+  let checkInLimitFull = "";
+  if (checkInLimitRaw) {
+    checkInLimitFull = checkInLimitRaw.length === 5 ? checkInLimitRaw + ":00" : checkInLimitRaw;
+  }
+  
+  let isLate = false;
+  if (hasIn && checkInLimitFull) {
+    isLate = todayRec!.checkInTime! > checkInLimitFull;
+  }
 
   const [kinerjaDate, setKinerjaDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [kinerjaTupoksi, setKinerjaTupoksi] = useState("");
@@ -228,6 +448,14 @@ export function Dashboard() {
     return () => window.removeEventListener("attendance_synchronized", handleFirebaseSync);
   }, [attendanceData]);
 
+  const handleClearCache = () => {
+    if (window.confirm("Apakah Anda yakin ingin membersihkan seluruh cache sistem? Sesi Anda mungkin akan dimuat ulang.")) {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.reload();
+    }
+  };
+
   const handleCreateOPD = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newOPDSingkatan || !newOPDNama) return;
@@ -236,7 +464,7 @@ export function Dashboard() {
     
     // Lazy load the ref to avoid adding many imports inside this chunk
     const { ref, set } = await import('firebase/database');
-    const { dbRealtime } = await import('../lib/firebase');
+    const { dbRealtime, getTenantRef } = await import('../lib/firebase');
     
     const obj = updated.reduce((acc, curr) => ({ ...acc, [curr.id]: curr }), {});
     
@@ -261,6 +489,7 @@ export function Dashboard() {
     const obj = updated.reduce((acc, curr) => ({ ...acc, [curr.id]: curr }), {});
     
     const { set } = await import('firebase/database');
+    const { getTenantRef } = await import('../lib/firebase');
     
     const fullRef = getTenantRef('satuanKerjas');
     console.log("=== DEBUG SATKER SAVE (DASHBOARD) ===");
@@ -283,7 +512,7 @@ export function Dashboard() {
     const updated = [{ id: String(Date.now()), userId: user?.id || "2", tanggal: kinerjaDate, tupoksi: kinerjaTupoksi, uraian: kinerjaUraian, satuan: kinerjaSatuan, jumlahDokumen: Number(kinerjaJumlah) }, ...kinerjas];
     
     const { ref, set } = await import('firebase/database');
-    const { dbRealtime } = await import('../lib/firebase');
+    const { dbRealtime, getTenantRef } = await import('../lib/firebase');
     
     const obj = updated.reduce((acc, curr) => ({ ...acc, [curr.id]: curr }), {});
     await set(getTenantRef('kinerjas'), obj);
@@ -298,7 +527,7 @@ export function Dashboard() {
     const updated = [{ id: String(Date.now()), userId: user?.id || "2", jenis: cutiJenis, tanggalMulai: cutiMulai, tanggalSelesai: cutiSelesai, alasan: cutiAlasan, status: "Pending" as const, dokumenUrl: cutiFile || undefined }, ...cutiRequests];
     
     const { ref, set } = await import('firebase/database');
-    const { dbRealtime } = await import('../lib/firebase');
+    const { dbRealtime, getTenantRef } = await import('../lib/firebase');
     
     const obj = updated.reduce((acc, curr) => ({ ...acc, [curr.id]: curr }), {});
     await set(getTenantRef('cuti_requests'), obj);
@@ -314,7 +543,7 @@ export function Dashboard() {
     photoDataUrl?: string
   ) => {
     const timeStr = format(new Date(), "HH:mm:ss");
-    const dbSchool = db.getSchool();
+    const dbSchool = school || { radius: 120, latitude: 0, longitude: 0 };
     const schoolLat = dbSchool.latitude || -6.200000;
     const schoolLng = dbSchool.longitude || 106.816666;
     const allowedRadius = dbSchool.radius || 120;
@@ -362,7 +591,7 @@ export function Dashboard() {
     let records = [...attendance];
     if (type === "masuk") {
       if (todayRec?.checkInTime) { toast.error("Sudah absen masuk."); return; }
-      const isLateStatus = timeStr > checkInLimitFull;
+      const isLateStatus = checkInLimitFull ? timeStr > checkInLimitFull : false;
       const record: any = { id: String(Date.now()), userId: user?.id || "", date: todayStr, checkInTime: timeStr, status: (isLateStatus ? "Terlambat" : "Hadir") as any, isSynced: false, syncStatus: "pending" as const, latitude: userLat, longitude: userLng, distance: distanceMeters, method: scanMethod as any };
       if (photoDataUrl) record.photoUrl = photoDataUrl;
       if (scannedBarcode) record.qrBarcodeData = scannedBarcode;
@@ -387,13 +616,13 @@ export function Dashboard() {
   };
 
   const statsData = {
-    pegawai: users.filter((u) => u.role !== "admin" && u.role !== "developer").length,
+    pegawai: users.filter((u) => !['admin', 'kepala_sekolah', 'developer'].includes(u.role)).length,
     opd: opds.length, satker: satuanKerjas.length, jabatan: jabatans.length,
-    hadir: attendance.filter((a) => a.date === todayStr && (a.status === "Hadir" || a.status === "Terlambat")).length,
-    alpha: attendance.filter((a) => a.date === todayStr && a.status === "Alpha").length,
-    sakit: attendance.filter((a) => a.date === todayStr && a.status === "Sakit").length,
-    izin: attendance.filter((a) => a.date === todayStr && (a.status === "Izin" || a.status === "Cuti Tahunan")).length,
-    dinas: attendance.filter((a) => a.date === todayStr && a.status === "Dinas/Lainnya").length,
+    hadir: attendance?.filter((a) => a.date === todayStr && (a.status === "Hadir" || a.status === "Terlambat"))?.length || 0,
+    alpha: attendance?.filter((a) => a.date === todayStr && a.status === "Alpha")?.length || 0,
+    sakit: attendance?.filter((a) => a.date === todayStr && a.status === "Sakit")?.length || 0,
+    izin: attendance?.filter((a) => a.date === todayStr && (a.status === "Izin" || a.status === "Cuti Tahunan"))?.length || 0,
+    dinas: attendance?.filter((a) => a.date === todayStr && a.status === "Dinas/Lainnya")?.length || 0,
   };
 
   const renderDetailStatusCard = () => (
@@ -418,7 +647,7 @@ export function Dashboard() {
         <div className="border-t border-dashed border-slate-200 my-2"></div>
         <div className="flex justify-between items-center text-[11px]">
           <div className="flex items-center gap-2 text-slate-500 font-bold"><ScanLine size={14} className="text-indigo-500" /> Masuk</div>
-          <div className="font-bold text-slate-800 flex items-center gap-1">{format(new Date(), "dd MMMM yyyy", { locale: id })} <Clock size={12} className="text-rose-500 ml-1" /> {checkInLimitRaw}</div>
+          <div className="font-bold text-slate-800 flex items-center gap-1">{format(new Date(), "dd MMMM yyyy", { locale: id })} <Clock size={12} className="text-rose-500 ml-1" /> {checkInLimitRaw || "-"}</div>
         </div>
         <div className="flex justify-between items-center text-[11px]">
           <div className="flex items-center gap-2 text-slate-500 font-bold"><Clock size={14} className="text-indigo-500" /> Tap Masuk</div>
@@ -439,7 +668,7 @@ export function Dashboard() {
 
         <div className="flex justify-between items-center text-[11px]">
           <div className="flex items-center gap-2 text-slate-500 font-bold"><ScanLine size={14} className="text-indigo-500" /> Pulang</div>
-          <div className="font-bold text-slate-800 flex items-center gap-1">{format(new Date(), "dd MMMM yyyy", { locale: id })} <Clock size={12} className="text-rose-500 ml-1" /> {checkOutLimitRaw}</div>
+          <div className="font-bold text-slate-800 flex items-center gap-1">{format(new Date(), "dd MMMM yyyy", { locale: id })} <Clock size={12} className="text-rose-500 ml-1" /> {checkOutLimitRaw || "-"}</div>
         </div>
         <div className="flex justify-between items-center text-[11px]">
           <div className="flex items-center gap-2 text-slate-500 font-bold"><Clock size={14} className="text-indigo-500" /> Tap Pulang</div>
@@ -468,7 +697,7 @@ export function Dashboard() {
       const dateStr = format(date, "yyyy-MM-dd");
       const dayLabel = format(date, "EEE", { locale: id }).replace(/^\./, "");
       const label = dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1, 3);
-      return { day: label, val: attendance.filter((a) => a.date === dateStr).length };
+      return { day: label, val: attendance?.filter((a) => a.date === dateStr)?.length || 0 };
     });
 
     const adminLeaderboard = leaderboard.slice(0, 5);
@@ -479,25 +708,256 @@ export function Dashboard() {
     const izinPct = hasData ? Math.round((statsData.izin / totalToday) * 100) : 0;
 
     return (
-      <div className="space-y-6 animate-fade-in pb-12">
+      <div className="w-full h-full flex flex-col gap-6">
+        <DashboardBanners tenantId={user?.tenantId} license={license} daysRemaining={daysRemaining} isExpired={isExpired} userRole={user?.role} />
+
+        {/* --- Soft Prompt Notification Banner (Fase 6) --- */}
+        {showSoftPrompt && (
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-3xl p-5 md:p-6 shadow-lg mb-6 flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in">
+            <div className="flex items-center gap-4">
+              <div className="bg-white/20 p-3 rounded-2xl hidden sm:block">
+                <Bell size={32} className="text-white animate-bounce-slow" />
+              </div>
+              <div>
+                <h3 className="text-lg md:text-xl font-black mb-1">Terima Notifikasi Real-Time</h3>
+                <p className="text-sm text-blue-100 font-medium">
+                  Dapatkan peringatan seketika saat ada pegawai yang terlambat atau presensi di luar lokasi! 
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 w-full md:w-auto">
+              <button onClick={dismissPrompt} className="flex-1 md:flex-none px-4 py-2 rounded-xl text-blue-100 hover:bg-white/10 font-bold transition-all text-sm">Nanti Saja</button>
+              <button onClick={requestPermission} className="flex-1 md:flex-none px-5 py-2 rounded-xl bg-white text-blue-600 hover:bg-blue-50 font-black shadow-lg transition-all text-sm">Aktifkan Sekarang</button>
+            </div>
+          </div>
+        )}
+        {/* ------------------------------------------------ */}
+        
         <div className="flex flex-col md:flex-row justify-between md:items-center gap-3">
           <div>
             <h2 className="text-2xl font-black text-gray-800 tracking-tight">Halo, {user?.name}! 👋</h2>
-            <p className="text-gray-500 mt-1 text-sm font-medium">Ringkasan aktivitas hari ini di <strong className="text-indigo-600">{school.name}</strong>.</p>
+            <p className="text-gray-500 mt-1 text-sm font-medium">
+              {(user?.role === 'developer' || user?.tenantId === 'GLOBAL')
+                ? "Pusat Kendali Utama SaaS Abdi Absen Digital."
+                : <span>Ringkasan aktivitas hari ini di <strong className="text-indigo-600">{school?.name || 'Instansi'}</strong>.</span>}
+            </p>
           </div>
         </div>
 
-        {user?.role === "developer" && (
-          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-6 border border-amber-500/40 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in">
-            <div className="space-y-1 text-center sm:text-left">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 text-xs font-black uppercase tracking-wider">
-                ⚙️ AKSES EKSKLUSIF PENGEMBANG
+        {(user?.role === 'developer' || user?.tenantId === 'GLOBAL') ? (
+          <div className="flex flex-col gap-6">
+            {/* Global Monitoring Widgets */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div 
+                onClick={() => {
+                  navigate('/admin/tenants');
+                }}
+                className="bg-white rounded-xl p-6 shadow-sm flex flex-col justify-between cursor-pointer hover:shadow-md transition-all duration-200 hover:-translate-y-1 active:scale-95 border border-transparent hover:border-indigo-200"
+              >
+                <p className="text-xs font-bold text-slate-400 uppercase">Total Instansi Aktif</p>
+                {globalLoading ? <div className="text-sm font-medium text-slate-500 mt-2 animate-pulse">Menghitung...</div> : <p className="text-3xl font-black text-slate-800 mt-2">{globalStats?.tenants?.filter((t: any) => !t.isDeleted)?.length || 0}</p>}
               </div>
-              <h3 className="text-xl font-black text-white">SaaS Developer Console</h3>
+              <div 
+                className="bg-white rounded-xl p-6 shadow-sm flex flex-col justify-between cursor-pointer hover:shadow-md transition-all duration-200 hover:-translate-y-1 active:scale-95 border border-transparent hover:border-indigo-200"
+              >
+                <p className="text-xs font-bold text-slate-400 uppercase">Mesin Kiosk Aktif</p>
+                {fsStatsLoading ? <div className="text-sm font-medium text-slate-500 mt-2 animate-pulse">Menghitung...</div> : <p className="text-3xl font-black text-slate-800 mt-2">{fsKiosksCount}</p>}
+              </div>
+              <div 
+                className="bg-white rounded-xl p-6 shadow-sm flex flex-col justify-between cursor-pointer hover:shadow-md transition-all duration-200 hover:-translate-y-1 active:scale-95 border border-transparent hover:border-indigo-200"
+              >
+                <p className="text-xs font-bold text-slate-400 uppercase">Log Aktivitas</p>
+                {fsStatsLoading ? <div className="text-sm font-medium text-slate-500 mt-2 animate-pulse">Menghitung...</div> : <p className="text-3xl font-black text-slate-800 mt-2">{fsLogsCount}</p>}
+              </div>
+              <div 
+                onClick={() => setIsGlobalUserModalOpen(true)}
+                className="bg-white rounded-xl p-6 shadow-sm flex flex-col justify-between cursor-pointer hover:shadow-md transition-all duration-200 hover:-translate-y-1 active:scale-95 border border-transparent hover:border-indigo-200"
+              >
+                <p className="text-xs font-bold text-slate-400 uppercase">Total Pengguna</p>
+                {globalLoading ? <div className="h-8 w-16 bg-slate-200 animate-pulse rounded mt-2"></div> : <p className="text-3xl font-black text-slate-800 mt-2">{globalStats?.totalUsers || 0}</p>}
+              </div>
             </div>
-            <Link to="/admin/developer" className="px-6 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black rounded-xl shadow-lg shadow-amber-500/30 transition-all">Buka Developer Console</Link>
+
+            {/* Grafik Aktivitas Sistem */}
+            <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-100 mt-2">
+              <h3 className="text-lg font-bold text-slate-800 mb-4">Tren Aktivitas Sistem</h3>
+              <div className="w-full relative" style={{ height: 300, minHeight: 300 }}>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={activityChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis 
+                      dataKey="date" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#64748b', fontSize: 12 }} 
+                      dy={10} 
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#64748b', fontSize: 12 }} 
+                    />
+                    <Tooltip 
+                      cursor={{ fill: '#f8fafc' }}
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    />
+                    <Bar 
+                      dataKey="aktivitas" 
+                      name="Aktivitas" 
+                      fill="#8b5cf6" 
+                      radius={[4, 4, 0, 0]} 
+                      barSize={40}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Grid Utama 2 Kolom untuk Developer */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+              {/* Kolom Kiri (Porsi 2/3) */}
+              <div className="lg:col-span-2 flex flex-col gap-6">
+                <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-100">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4">Jalan Pintas Pusat Kendali</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <Link to="/admin/tenants" className="flex items-center justify-center gap-2 p-4 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl font-semibold transition-all hover:shadow-md">
+                      🏢 Kelola Instansi
+                    </Link>
+                    <Link to="/admin/system-config" className="flex items-center justify-center gap-2 p-4 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-xl font-semibold transition-all hover:shadow-md">
+                      ⚙️ Konfigurasi API & AI
+                    </Link>
+                    <button onClick={handleClearCache} className="flex items-center justify-center gap-2 p-4 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-xl font-semibold transition-all hover:shadow-md">
+                      🧹 Bersihkan Cache Sistem
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-100">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4">Daftar Instansi Terbaru</h3>
+                  <div className="space-y-3">
+                    {(!globalStats?.tenants || globalStats.tenants.length === 0) ? (
+                      <p className="text-sm text-slate-500 text-center py-4">Belum ada instansi terdaftar.</p>
+                    ) : (
+                      globalStats.tenants.slice(0, 5).map((tenant: any) => (
+                        <div key={tenant.id} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-lg transition-colors border border-slate-100">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center font-bold">
+                              { (tenant?.school?.name || tenant?.name || 'I').substring(0, 3).toUpperCase() }
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-slate-800">{tenant?.school?.name || tenant?.name || 'Instansi Tanpa Nama'}</p>
+                              <p className="text-xs text-slate-500">{tenant.email || `ID: ${tenant.id}`}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Kolom Kanan (Porsi 1/3) */}
+              <div className="flex flex-col gap-6">
+                <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-100 h-full">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4">Log Aktivitas Sistem</h3>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 mt-1.5 shrink-0"></div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">Sistem Berhasil Booting</p>
+                        <p className="text-xs text-slate-500">Just now</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="w-2.5 h-2.5 rounded-full bg-blue-500 mt-1.5 shrink-0"></div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">Admin melakukan sync data</p>
+                        <p className="text-xs text-slate-500">2 mins ago</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="w-2.5 h-2.5 rounded-full bg-amber-500 mt-1.5 shrink-0"></div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">Pengecekan Kuota WA Gateway</p>
+                        <p className="text-xs text-slate-500">10 mins ago</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="w-2.5 h-2.5 rounded-full bg-slate-400 mt-1.5 shrink-0"></div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">Auto-Backup Database</p>
+                        <p className="text-xs text-slate-500">1 hour ago</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Global User */}
+            {isGlobalUserModalOpen && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+                  <h3 className="text-xl font-bold text-slate-800 mb-4">Total Pengguna Global</h3>
+                  <div className="space-y-4">
+                    <p className="text-slate-600 text-sm leading-relaxed">
+                      Total <strong>{globalStats?.totalUsers || 0}</strong> pengguna telah terdaftar melintasi <strong>{globalStats?.totalTenants || 0}</strong> instansi di platform SaaS Abdi Absen Digital.
+                    </p>
+                    <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-lg">
+                      <p className="text-xs text-indigo-700">Manajemen individual akun hanya dapat dilakukan oleh Admin Sekolah di masing-masing Tenant, atau via Cloud Functions jika diperlukan operasi masal.</p>
+                    </div>
+                  </div>
+                  <div className="mt-6 flex justify-end">
+                    <button onClick={() => setIsGlobalUserModalOpen(false)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition">Tutup</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal WA Config */}
+            {isWaConfigModalOpen && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+                  <h3 className="text-xl font-bold text-slate-800 mb-4">Status API & Fallback WA</h3>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                      <span className="text-sm font-semibold text-slate-700">Mode Fallback Global</span>
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${(globalStats?.settings?.config?.wa_fallback_enabled || globalStats?.settings?.config?.waFallbackEnabled) ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                        {(globalStats?.settings?.config?.wa_fallback_enabled || globalStats?.settings?.config?.waFallbackEnabled) ? 'AKTIF' : 'NONAKTIF'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500">Konfigurasi lebih lanjut tersedia di menu <Link to="/admin/system-config" className="text-indigo-600 font-bold hover:underline">Konfigurasi Sistem</Link>.</p>
+                  </div>
+                  <div className="mt-6 flex justify-end">
+                    <button onClick={() => setIsWaConfigModalOpen(false)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition">Tutup</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal DB Status */}
+            {isDbStatusModalOpen && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in">
+                <div className="bg-white rounded-xl w-full max-w-sm shadow-2xl overflow-hidden">
+                  <div className="bg-indigo-600 p-4 flex items-center justify-center">
+                    <RefreshCw size={48} className="text-white animate-spin-slow opacity-80" />
+                  </div>
+                  <div className="p-6 text-center space-y-2">
+                    <h3 className="text-lg font-black text-slate-800">Koneksi Stabil</h3>
+                    <p className="text-sm text-slate-600 font-medium">Terhubung ke <strong>Firebase Realtime Database</strong>.</p>
+                    <div className="inline-flex gap-2 text-xs font-mono bg-slate-100 px-3 py-1.5 rounded-full text-slate-500 mt-2">
+                      <span>region: asia-southeast1</span>
+                    </div>
+                  </div>
+                  <div className="p-4 border-t border-slate-100 flex justify-center bg-slate-50">
+                    <button onClick={() => setIsDbStatusModalOpen(false)} className="px-6 py-2 bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-lg text-sm font-bold transition">Tutup Panel</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        ) : (
+          <div className="flex flex-col gap-6">
 
         <div className="bg-white border rounded-2xl p-5 mb-8 flex flex-col md:flex-row gap-4 items-center shadow-[0_4px_20px_rgb(0,0,0,0.06)]">
           <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center shrink-0"><Send className="text-blue-600" size={20} /></div>
@@ -505,7 +965,7 @@ export function Dashboard() {
             <h3 className="font-bold text-blue-900 text-sm mb-1">Siaran Pengumuman Massal (Broadcast)</h3>
             <div className="flex gap-2 w-full">
               <input type="text" value={broadcastMessage} onChange={(e) => setBroadcastMessage(e.target.value)} placeholder="Tulis pengumuman untuk semua guru/staf..." className="flex-1 border border-blue-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-100" />
-              {(!db.getSchool().gasWebAppUrl && !db.getSchool().whatsappApiKey && !globalSettingsLoading && globalSettings.wa_fallback_enabled) ? (
+              {(!({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any).gasWebAppUrl && !({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any).whatsappApiKey && !globalSettingsLoading && globalSettings.wa_fallback_enabled) ? (
                 <button onClick={handleBroadcast} disabled={broadcastSending || !broadcastMessage.trim()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-sm font-bold shadow-md">Kirim via WA Web</button>
               ) : (
                 <button onClick={handleBroadcast} disabled={broadcastSending} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-sm font-bold shadow-md">{broadcastSending ? "Menyiarkan..." : "Siarkan"}</button>
@@ -536,8 +996,8 @@ export function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <div className="lg:col-span-6 bg-white rounded-[1.5rem] p-6 shadow-[0_4px_20px_rgb(0,0,0,0.06)] border border-gray-100">
             <h3 className="font-bold text-gray-800 text-sm mb-5">Aktivitas Presensi (7 Hari)</h3>
-            <div className="h-52">
-              <ResponsiveContainer width="100%" height="100%">
+            <div style={{ width: '100%', minHeight: '300px' }}>
+              <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={activityData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
                   <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: "#9CA3AF", fontSize: 11 }} />
@@ -601,7 +1061,9 @@ export function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 text-xs">
-                {attendance.length === 0 ? (
+                {attLoading ? (
+                  <tr><td colSpan={5} className="p-8 text-center text-gray-400 animate-pulse font-bold">Memuat data presensi terbaru...</td></tr>
+                ) : !attendance || attendance.length === 0 ? (
                   <tr><td colSpan={5} className="p-8 text-center text-gray-400">Belum ada log presensi.</td></tr>
                 ) : (
                   attendance.slice(0, 8).map((record) => {
@@ -621,6 +1083,8 @@ export function Dashboard() {
             </table>
           </div>
         </div>
+          </div>
+        )}
 
         {showAddOPD && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -681,7 +1145,7 @@ export function Dashboard() {
               </div>
 
               <div className="flex-1 overflow-y-auto min-h-0 space-y-2 pr-2 custom-scrollbar">
-                {users.filter(u => u.role !== 'admin').map((usr, i) => {
+                {users.filter(u => !['admin', 'kepala_sekolah', 'developer'].includes(u.role)).map((usr, i) => {
                   let phoneNumber = usr.phone || "";
                   if (phoneNumber.startsWith('0')) phoneNumber = '62' + phoneNumber.substring(1);
                   if (phoneNumber.startsWith('+')) phoneNumber = phoneNumber.substring(1);
@@ -711,7 +1175,7 @@ export function Dashboard() {
                     </div>
                   );
                 })}
-                {users.filter(u => u.role !== 'admin').length === 0 && (
+                {users.filter(u => !['admin', 'kepala_sekolah', 'developer'].includes(u.role)).length === 0 && (
                   <div className="text-center p-6 text-slate-400 text-sm">Belum ada data pegawai/guru.</div>
                 )}
               </div>
@@ -769,6 +1233,8 @@ export function Dashboard() {
         </header>
 
         <main className="flex-1 overflow-y-auto px-4 sm:px-5 py-4 space-y-4 pb-6">
+          <DashboardBanners tenantId={user?.tenantId} license={license} daysRemaining={daysRemaining} isExpired={isExpired} userRole={user?.role} />
+          
           <details className="bg-slate-900 dark:bg-slate-900/90 p-3 rounded-2xl text-slate-300 border border-slate-800 overflow-hidden shadow-sm text-xs mb-3">
             <summary className="font-extrabold text-[11px] uppercase tracking-wider text-yellow-400 flex items-center gap-1.5 cursor-pointer select-none">
               🛰️ Mode Simulasi GPS Satelit
@@ -843,22 +1309,29 @@ export function Dashboard() {
                 <div className="space-y-4">
                   {renderDetailStatusCard()}
 
-                  <div className="grid grid-cols-2 gap-3 pb-1">
-                    <button
-                      onClick={() => { setActiveQrMode("check_in"); setScanStep(1); }}
-                      className="bg-[#5c4fff] hover:bg-indigo-700 text-white font-extrabold py-5 rounded-[1.5rem] shadow-md flex flex-col items-center justify-center transition active:scale-95"
-                    >
-                      <ScanLine size={28} strokeWidth={2.5} className="mb-2" />
-                      <span className="text-[12px] font-black uppercase tracking-wider">Absen Masuk</span>
-                    </button>
-                    <button
-                      onClick={() => { setActiveQrMode("check_out"); setScanStep(1); }}
-                      className="bg-[#ff2d55] hover:bg-rose-600 text-white font-extrabold py-5 rounded-[1.5rem] shadow-md flex flex-col items-center justify-center transition active:scale-95"
-                    >
-                      <ScanLine size={28} strokeWidth={2.5} className="mb-2" />
-                      <span className="text-[12px] font-black uppercase tracking-wider">Absen Pulang</span>
-                    </button>
-                  </div>
+                  {schoolLoading ? (
+                    <div className="flex flex-col items-center justify-center py-10">
+                      <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                      <p className="text-sm font-bold text-slate-500 mt-4">Memuat Konfigurasi Instansi...</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3 pb-1">
+                      <button
+                        onClick={() => { setActiveQrMode("check_in"); setScanStep(1); }}
+                        className="bg-[#5c4fff] hover:bg-indigo-700 text-white font-extrabold py-5 rounded-[1.5rem] shadow-md flex flex-col items-center justify-center transition active:scale-95"
+                      >
+                        <ScanLine size={28} strokeWidth={2.5} className="mb-2" />
+                        <span className="text-[12px] font-black uppercase tracking-wider">Absen Masuk</span>
+                      </button>
+                      <button
+                        onClick={() => { setActiveQrMode("check_out"); setScanStep(1); }}
+                        className="bg-[#ff2d55] hover:bg-rose-600 text-white font-extrabold py-5 rounded-[1.5rem] shadow-md flex flex-col items-center justify-center transition active:scale-95"
+                      >
+                        <ScanLine size={28} strokeWidth={2.5} className="mb-2" />
+                        <span className="text-[12px] font-black uppercase tracking-wider">Absen Pulang</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
               ) : (
@@ -983,7 +1456,7 @@ export function Dashboard() {
                     <span className="col-span-3 text-left">Tanggal</span><span className="col-span-3">Masuk</span><span className="col-span-3">Pulang</span><span className="col-span-3">Status</span>
                   </div>
                   <div className="divide-y divide-slate-100 text-gray-700">
-                    {attendance.filter(a => a.userId === user?.id).map((item) => (
+                    {attendance?.filter(a => a.userId === user?.id)?.map((item) => (
                       <div key={item.id} className="py-2 px-2.5 grid grid-cols-12 gap-1 items-center hover:bg-slate-50">
                         <span className="col-span-3 text-left font-bold text-gray-800">{format(new Date(item.date), "dd-MM")}</span>
                         <span className="col-span-3 text-center font-mono">{item.checkInTime || "--:--"}</span>

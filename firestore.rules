@@ -1,0 +1,140 @@
+rules_version = '2';
+
+// ════════════════════════════════════════════════════════════════════
+// ABDI Absen Digital — Firestore Security Rules v2
+// ════════════════════════════════════════════════════════════════════
+//
+// SEC-003 FIX: Rules sebelumnya terlalu longgar:
+//   allow read, write: if request.auth != null;  ← BERBAHAYA
+//
+// Rules baru: DEFAULT DENY + RBAC berbasis custom claims / user doc.
+//
+// ARSITEKTUR KEAMANAN:
+//   - Semua akses DENIED secara default
+//   - User hanya bisa akses data dalam tenant mereka sendiri
+//   - Admin/developer dapat akses lebih luas tapi tetap terbatas
+//   - Validasi field wajib pada write operations
+//
+// CATATAN PENTING:
+//   Firestore digunakan sebagai SECONDARY database (RTDB adalah primary).
+//   Jika ada koleksi baru yang perlu diakses, tambahkan rule eksplisit
+//   di bawah — JANGAN kembalikan ke allow all.
+// ════════════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper Functions ─────────────────────────────────────────────
+
+    // Apakah user sudah login?
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Apakah user adalah pemilik dokumen?
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Ambil role dari custom claim Firebase Auth (set via Admin SDK)
+    // Fallback ke lookup dokumen user jika custom claims belum tersedia
+    function getUserRole() {
+      return request.auth.token.role;
+    }
+
+    // Apakah user adalah developer (global super admin)?
+    function isDeveloper() {
+      return isSignedIn() && getUserRole() == 'developer';
+    }
+
+    // Apakah user adalah admin tenant?
+    function isAdmin() {
+      return isSignedIn() && getUserRole() in ['admin', 'developer'];
+    }
+
+    // Apakah user adalah kepala sekolah atau admin?
+    function isAdminOrPrincipal() {
+      return isSignedIn() && getUserRole() in ['admin', 'developer', 'kepala_sekolah'];
+    }
+
+    // Ambil tenantId dari custom claim
+    function getUserTenantId() {
+      return request.auth.token.tenantId;
+    }
+
+    // Apakah user milik tenant tertentu?
+    function belongsToTenant(tenantId) {
+      return isSignedIn() && (
+        isDeveloper() ||
+        getUserTenantId() == tenantId
+      );
+    }
+
+    // ── DEFAULT DENY ─────────────────────────────────────────────────
+    // Semua path yang tidak disebutkan di bawah ini → DENIED
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ── Global: Developer-only metadata ─────────────────────────────
+    // Hanya developer (via RTDB global_admins) yang bisa kelola koleksi global
+    match /global_config/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isDeveloper();
+    }
+
+    // ── Landing page public data ─────────────────────────────────────
+    match /global_landing/{docId} {
+      allow read: if true; // Data publik untuk landing page
+      allow write: if isDeveloper();
+    }
+
+    // ── Tenant data ─────────────────────────────────────────────────
+    // Isolasi tenant: user hanya bisa akses data dalam tenant mereka
+    match /tenants/{tenantId} {
+      allow read: if belongsToTenant(tenantId);
+      allow write: if belongsToTenant(tenantId) && isAdmin();
+
+      // Sub-koleksi di dalam tenant
+      match /{subcollection}/{docId} {
+        allow read: if belongsToTenant(tenantId);
+        allow create: if belongsToTenant(tenantId) && isAdmin();
+        allow update: if belongsToTenant(tenantId) && isAdmin();
+        allow delete: if belongsToTenant(tenantId) && isAdmin();
+      }
+
+      // Koleksi absensi: guru/staf bisa tulis record mereka sendiri
+      match /attendance/{recordId} {
+        allow read: if belongsToTenant(tenantId);
+        // Guru bisa buat record baru; update/delete hanya admin
+        allow create: if belongsToTenant(tenantId);
+        allow update: if belongsToTenant(tenantId) && isAdmin();
+        allow delete: if belongsToTenant(tenantId) && isAdmin();
+      }
+
+      // Laporan: hanya admin dan kepala sekolah yang bisa baca
+      match /reports/{reportId} {
+        allow read: if belongsToTenant(tenantId) && isAdminOrPrincipal();
+        allow write: if belongsToTenant(tenantId) && isAdmin();
+      }
+    }
+
+    // ── User profile pribadi ─────────────────────────────────────────
+    // User hanya bisa baca/tulis profil mereka sendiri
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isDeveloper();
+    }
+
+    // ── Audit logs: append-only ──────────────────────────────────────
+    // Log tidak boleh diupdate atau dihapus untuk integritas
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn(); // Siapapun bisa buat log
+      allow update: if false;        // TIDAK ada yang bisa update log
+      allow delete: if isDeveloper(); // Hanya developer bisa hapus (GDPR)
+    }
+  }
+}

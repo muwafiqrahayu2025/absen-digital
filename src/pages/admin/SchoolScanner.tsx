@@ -92,7 +92,7 @@ export function SchoolScanner() {
   const isModalActiveRef = useRef(false);
 
   // ── Stable derived values ──────────────────────────────────
-  const school: School = useMemo(() => db.getSchool(), []);
+  const school: School = useMemo(() => ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any), []);
   // BUG-11 FIX: todayStr must refresh at midnight; use state + interval instead of frozen useMemo
   const [todayStr, setTodayStr] = React.useState(() => format(new Date(), "yyyy-MM-dd"));
   React.useEffect(() => {

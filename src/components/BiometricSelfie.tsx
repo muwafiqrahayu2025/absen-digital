@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Camera, RefreshCw, CheckCircle, AlertTriangle, MapPin, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { Camera, RefreshCw, AlertTriangle, MapPin, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { verifyFaceQuality } from '../lib/faceVerification';
+import { loadFaceModels, detectFace, matchFace, getModelLoadError } from '../lib/faceRecognition';
+import { useAuth } from './AuthContext';
 
 interface BiometricSelfieProps {
   onCaptureSuccess: (photoDataUrl: string) => void;
@@ -28,18 +30,52 @@ export const BiometricSelfie: React.FC<BiometricSelfieProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // ── [BUG-001 FIX] useRef menyimpan stream terkini ─────────────────────
+  // Closure cleanup useEffect sebelumnya menangkap 'stream' saat nilai-nya
+  // masih null (saat mount). Dengan streamRef, cleanup SELALU dapat
+  // mengakses stream aktif, mencegah memory leak & kamera tetap menyala.
+  const streamRef = useRef<MediaStream | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
+
+  // ── [BUG-005 FIX] Mutex sinkron mencegah concurrent capture ──────────
+  // Beroperasi secara sinkron (tidak menunggu re-render) sehingga tidak
+  // tertembus oleh React batch update saat user spam klik.
+  const isCapturing = useRef(false);
+
   const [isVerifying, setIsVerifying] = useState(false);
   const [issues, setIssues] = useState<string[]>([]);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
+  const { user } = useAuth();
+  const [isModelsLoaded, setIsModelsLoaded] = useState(false);
+  const [modelError, setModelError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadFaceModels().then((success) => {
+      setIsModelsLoaded(success);
+      if (!success) {
+        // [BUG-010 FIX] Tampilkan pesan error actionable ke user
+        const errMsg = getModelLoadError();
+        setModelError(errMsg || 'Gagal memuat model AI wajah. Pastikan koneksi internet aktif lalu refresh halaman.');
+      }
+    });
+  }, []);
+
+  // ── [BUG-001 FIX] Helper cleanup via ref — selalu berhasil ──────────
+  const stopCurrentStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      setStream(null);
+    }
+  }, []);
 
   const initCamera = useCallback(async (deviceId?: string) => {
     try {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-      
+      // Hentikan stream lama dulu sebelum membuat yang baru
+      stopCurrentStream();
+
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = devices.filter((device) => device.kind === 'videoinput');
       setCameras(videoDevices);
@@ -50,30 +86,34 @@ export const BiometricSelfie: React.FC<BiometricSelfieProps> = ({
         const frontCam = videoDevices.find((c) => c.label.toLowerCase().includes('front') || c.label.toLowerCase().includes('depan'));
         targetId = frontCam ? frontCam.deviceId : videoDevices[0].deviceId;
       }
-      
+
       setSelectedCamera(targetId || '');
 
-      const constraints = targetId 
+      const constraints = targetId
         ? { video: { deviceId: { exact: targetId }, width: 640, height: 480 } }
         : { video: { facingMode: 'user', width: 640, height: 480 } };
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      // Simpan ke ref DAN state — ref untuk cleanup, state untuk UI
+      streamRef.current = newStream;
       setStream(newStream);
-      
+
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
       }
     } catch (err: any) {
       toast.error('Gagal mengakses kamera: ' + err.message);
     }
-  }, [stream]);
+  }, [stopCurrentStream]);
 
   useEffect(() => {
     initCamera();
+
+    // ── [BUG-001 FIX] Cleanup via ref — dijamin selalu terpanggil ─────
+    // Tidak lagi bergantung pada closure 'stream' yang saat mount masih null.
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
+      stopCurrentStream();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -86,39 +126,100 @@ export const BiometricSelfie: React.FC<BiometricSelfieProps> = ({
   };
 
   const captureAndVerify = async () => {
+    // ── [BUG-005 FIX] Mutex sinkron — dicek sebelum operasi async ─────
+    // isCapturing.current beroperasi synchronously sehingga tidak bisa
+    // ditembus oleh React batch update. Mencegah verifikasi berjalan paralel.
+    if (isCapturing.current) return;
     if (!videoRef.current || !canvasRef.current) return;
-    
+
+    isCapturing.current = true;
     setIsVerifying(true);
     setIssues([]);
-    
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-    
-    if (context) {
+
+    try {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
+
+      if (!context) {
+        toast.error('Gagal mengakses canvas kamera.');
+        return;
+      }
+
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
+
       const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-      
+
       try {
+        if (!isModelsLoaded) {
+          // [BUG-010 FIX] Pesan error yang informatif dan actionable
+          const errMsg = getModelLoadError() || 'Model AI belum siap. Pastikan koneksi internet aktif dan refresh halaman.';
+          throw new Error(errMsg);
+        }
+
+        // 1. Deteksi Wajah dengan ML
+        const detection = await detectFace(video);
+
+        if (!detection) {
+          setIssues(["Wajah tidak terdeteksi. Pastikan pencahayaan terang dan wajah terlihat jelas."]);
+          toast.error("Wajah tidak terdeteksi");
+          return;
+        }
+
+        // 2. Liveness Detection (Senyum)
+        const isSmiling = detection.expressions.happy > 0.7;
+        if (!isSmiling) {
+          setIssues(["Liveness Gagal: Silakan TERSENYUM saat absen untuk mencegah foto palsu."]);
+          toast.error("Silakan tersenyum untuk absen!");
+          return;
+        }
+
+        // 3. Cek apakah user punya data wajah terdaftar
+        let biometricStatus = "verified";
+
+        if (user?.faceDescriptor) {
+          try {
+            const userDescriptor = JSON.parse(user.faceDescriptor);
+            const { isMatch, distance } = matchFace(userDescriptor, detection.descriptor);
+
+            if (!isMatch) {
+              setIssues([`Wajah tidak cocok (Akurasi: ${distance.toFixed(2)}).`]);
+              toast.error("Wajah tidak cocok dengan profil Anda!");
+              return;
+            }
+          } catch (e) {
+            console.error("Gagal parsing descriptor user", e);
+          }
+        } else {
+          // Jika tidak ada data wajah, fallback ke manual pending
+          biometricStatus = "pending_manual";
+          toast.success("Wajah tidak terdaftar di Profil. Absen diteruskan dengan status Pending.");
+        }
+
+        // Verifikasi kualitas foto konvensional sebagai lapis kedua
         const result = await verifyFaceQuality(photoDataUrl);
-        if (result.passed) {
-          toast.success('Wajah terverifikasi!');
-          // Hentikan stream kamera
-          if (stream) stream.getTracks().forEach((t) => t.stop());
-          onCaptureSuccess(photoDataUrl);
+        if (result.passed || biometricStatus === "verified") {
+          toast.success(biometricStatus === "verified" ? 'Wajah biometrik cocok!' : 'Wajah terdeteksi.');
+          stopCurrentStream();
+          // Kirim status biometrik lewat payload tambahan (diimplementasi di ScanQR)
+          onCaptureSuccess(photoDataUrl + `|BIOMETRIC:${biometricStatus}`);
         } else {
           setIssues(result.issues);
           toast.error('Foto belum memenuhi syarat, silakan ambil ulang.');
         }
       } catch (err: any) {
-        toast.error('Gagal memverifikasi wajah.');
+        toast.error('Gagal memverifikasi wajah secara biometrik. Lanjut tanpa biometrik (Pending Manual).');
+        stopCurrentStream();
+        onCaptureSuccess(photoDataUrl + `|BIOMETRIC:pending_manual`);
       }
+    } finally {
+      // ── [BUG-005 FIX] Mutex SELALU dilepas via finally ─────────────
+      // Dijamin berjalan bahkan jika terjadi exception di mana pun.
+      isCapturing.current = false;
+      setIsVerifying(false);
     }
-    
-    setIsVerifying(false);
   };
 
   const isSafeGeofence = currentDistance <= maxRadius;
@@ -134,6 +235,14 @@ export const BiometricSelfie: React.FC<BiometricSelfieProps> = ({
           Batal
         </button>
       </div>
+
+      {/* [BUG-010 FIX] Model error banner — tampilkan jika model gagal dimuat */}
+      {modelError && (
+        <div className="mx-4 mt-4 bg-amber-50 border border-amber-200 text-amber-700 p-3 rounded-xl text-[11px] flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <p>{modelError}</p>
+        </div>
+      )}
       
       <div className="p-4 sm:p-6 space-y-5">
         <div className="text-center">

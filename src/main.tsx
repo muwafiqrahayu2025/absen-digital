@@ -6,6 +6,10 @@ import { initializeFirebaseSync } from "./lib/firebaseSync";
 import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { idbStorage } from "./lib/idbStorage";
 import { registerSW } from "virtual:pwa-register";
+import { initLoggerInterceptor } from "./utils/loggerInterceptor";
+
+// Inisialisasi logger secara global agar tidak mati saat ganti halaman
+initLoggerInterceptor();
 
 // --- PWA AUTO-UPDATE SERVICE WORKER ---
 // Memastikan cache lama langsung dibersihkan dan halaman dimuat ulang secara otomatis saat ada pembaruan build baru

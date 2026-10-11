@@ -1,32 +1,81 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * import {onCall} from "firebase-functions/v2/https";
- * import {onDocumentWritten} from "firebase-functions/v2/firestore";
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
-
 import {setGlobalOptions} from "firebase-functions";
-import {onRequest} from "firebase-functions/https";
-import * as logger from "firebase-functions/logger";
+import {onCall, HttpsError} from "firebase-functions/v2/https";
+import * as admin from "firebase-admin";
 
-// Start writing functions
-// https://firebase.google.com/docs/functions/typescript
+admin.initializeApp();
+const db = admin.database();
 
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
-setGlobalOptions({ maxInstances: 10 });
+setGlobalOptions({maxInstances: 10});
 
-// export const helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+// ── API Proxy Functions (Fase 3 Security — API Key tidak pernah ke client) ──
+export {sendWhatsAppProxy, sendGeminiProxy} from "./proxy.js";
+
+export const permanentlyDeleteTenant = onCall(async (request) => {
+  const auth = request.auth;
+  if (!auth) {
+    throw new HttpsError(
+      "unauthenticated",
+      "Harus login untuk melakukan aksi ini."
+    );
+  }
+
+  const {tenantId} = request.data;
+  if (!tenantId) {
+    throw new HttpsError(
+      "invalid-argument",
+      "tenantId tidak boleh kosong."
+    );
+  }
+
+  const uid = auth.uid;
+  const globalAdminsRef = db.ref(`global_admins/${uid}`);
+  const snap = await globalAdminsRef.get();
+  const isGlobalAdmin = snap.exists() && snap.val() === true;
+
+  if (!isGlobalAdmin && auth.token.role !== "developer") {
+    if (!isGlobalAdmin) {
+      throw new HttpsError(
+        "permission-denied",
+        "Hanya developer atau super admin yang dapat mengakses."
+      );
+    }
+  }
+
+  try {
+    const tenantUsersRef = db.ref(`tenants/${tenantId}/users`);
+    const tenantUsersSnap = await tenantUsersRef.get();
+
+    if (tenantUsersSnap.exists()) {
+      const usersData = tenantUsersSnap.val();
+      const uids = Object.keys(usersData);
+
+      if (uids.length > 0) {
+        for (let i = 0; i < uids.length; i += 1000) {
+          const chunk = uids.slice(i, i + 1000);
+          await admin.auth().deleteUsers(chunk);
+        }
+      }
+
+      const mappingUpdates: Record<string, null> = {};
+      uids.forEach((u) => {
+        mappingUpdates[u] = null;
+      });
+      if (Object.keys(mappingUpdates).length > 0) {
+        await db.ref("user_tenant_mapping").update(mappingUpdates);
+      }
+    }
+
+    await db.ref(`tenants/${tenantId}`).remove();
+
+    return {
+      success: true,
+      message: `Tenant ${tenantId} berhasil dihapus permanen.`,
+    };
+  } catch (error) {
+    console.error("Error permanently deleting tenant:", error);
+    throw new HttpsError(
+      "internal",
+      "Gagal menghapus tenant secara permanen."
+    );
+  }
+});

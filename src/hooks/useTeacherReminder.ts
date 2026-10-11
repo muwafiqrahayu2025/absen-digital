@@ -12,7 +12,7 @@ export function useTeacherReminder() {
     if (!user || (user.role !== 'guru' && user.role !== 'staf_sekolah')) return;
 
     const checkReminder = () => {
-      const school = db.getSchool();
+      const school = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
       const limitTime = school.operationalCheckInLimit || '08:00';
       const now = new Date();
       

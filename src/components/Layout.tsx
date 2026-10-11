@@ -6,6 +6,7 @@ import { useEditMode } from "./EditModeContext";
 import { EditableText } from "./EditableText";
 import {
   LayoutDashboard,
+  LayoutTemplate,
   Users,
   School,
   Calendar,
@@ -39,6 +40,10 @@ import {
   Menu,
   Bell,
   BookOpen,
+  Lock,
+  Monitor,
+  Zap,
+  History
 } from "lucide-react";
 import { DeveloperSettingsModal } from "./DeveloperSettingsModal";
 import { WindowControls } from "./WindowControls";
@@ -51,6 +56,8 @@ import { useTeacherReminder } from "../hooks/useTeacherReminder";
 import { useLicense } from "../hooks/useLicense";
 import { PackageActivationCard } from "./PackageActivationCard";
 import { ROLE_LABELS } from "../types";
+import { ref, onValue, query, limitToLast } from "firebase/database";
+import { dbRealtime } from "../lib/firebase";
 
 // ─────────────────────────────────────────────────────────────
 // TYPES
@@ -63,6 +70,8 @@ type NavItemProps = {
   children?: NavItemProps[];
   onClick?: () => void;
   badge?: string | number;
+  isLocked?: boolean;
+  textColor?: string;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -95,18 +104,28 @@ const NavGroup: React.FC<{ item: NavItemProps; currentPath: string }> = ({ item,
   const inactiveClass = "border-transparent text-white/75 hover:bg-white/12 hover:text-white";
 
   if (!item.children) {
-    if (item.onClick) {
+    if (item.onClick || item.isLocked) {
       return (
         <button
-          onClick={item.onClick}
+          onClick={(e) => {
+            if (item.isLocked) {
+              e.preventDefault();
+              toast("Fitur ini tidak tersedia di Paket Anda.", { icon: "🔒" });
+              window.dispatchEvent(new Event("open_package_modal"));
+            } else if (item.onClick) {
+              item.onClick();
+            }
+          }}
           className={cn(
             "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 text-sm border cursor-pointer",
-            inactiveClass
+            inactiveClass,
+            item.isLocked && "opacity-70 text-white/40 bg-transparent hover:bg-transparent"
           )}
         >
           <div className="w-5 h-5 flex items-center justify-center shrink-0">{item.icon}</div>
-          <span className="flex-1 text-left">
+          <span className="flex-1 text-left flex items-center gap-2 truncate">
             <EditableText originalText={item.label} />
+            {item.isLocked && <Lock size={13} className="ml-auto opacity-50" />}
           </span>
         </button>
       );
@@ -154,26 +173,42 @@ const NavGroup: React.FC<{ item: NavItemProps; currentPath: string }> = ({ item,
       {isOpen && (
         <div className="ml-9 mt-0.5 flex flex-col gap-0.5 relative before:absolute before:left-[-12px] before:top-0 before:bottom-0 before:w-px before:bg-white/15">
           {item.children.map((child, index) =>
-            child.onClick ? (
+            child.onClick || child.isLocked ? (
               <button
                 key={index}
-                onClick={child.onClick}
-                className="w-full text-left py-2 px-2.5 rounded-lg text-sm transition-all duration-100 text-white/60 hover:text-white hover:bg-white/10 cursor-pointer"
+                onClick={(e) => {
+                  if (child.isLocked) {
+                    e.preventDefault();
+                    toast("Fitur ini tidak tersedia di Paket Anda.", { icon: "🔒" });
+                    window.dispatchEvent(new Event("open_package_modal"));
+                  } else if (child.onClick) {
+                    child.onClick();
+                  }
+                }}
+                className={cn(
+                  "w-full text-left flex items-center justify-between py-2 px-2.5 rounded-lg text-sm transition-all duration-100 cursor-pointer",
+                  child.isLocked ? "text-white/40 opacity-70 hover:bg-transparent" : "text-white/60 hover:text-white hover:bg-white/10"
+                )}
               >
-                <EditableText originalText={child.label} />
+                <span className="flex-1 truncate whitespace-nowrap">
+                  <EditableText originalText={child.label} />
+                </span>
+                {child.isLocked && <Lock size={12} className="opacity-50 shrink-0 ml-2" />}
               </button>
             ) : (
               <Link
                 key={index}
                 to={child.to || "#"}
                 className={cn(
-                  "py-2 px-2.5 rounded-lg text-sm transition-all duration-100 border",
+                  "flex items-center py-2 px-2.5 rounded-lg text-sm transition-all duration-100 border",
                   child.to && isRouteActive(child.to, location.pathname, location.search)
                     ? "bg-white/20 text-white font-semibold border-white/20"
                     : "border-transparent text-white/60 hover:text-white hover:bg-white/10"
                 )}
               >
-                <EditableText originalText={child.label} />
+                <span className="flex-1 truncate whitespace-nowrap">
+                  <EditableText originalText={child.label} />
+                </span>
               </Link>
             )
           )}
@@ -187,9 +222,10 @@ const NavGroup: React.FC<{ item: NavItemProps; currentPath: string }> = ({ item,
 // MAIN LAYOUT
 // ─────────────────────────────────────────────────────────────
 export function Layout() {
-  const { user, logout } = useAuth();
-  const isTeacherOrStaff = user?.role === "guru" || user?.role === "dosen" || user?.role === "staf_sekolah" || user?.role === "staf_kampus";
-  const [school, setSchool] = useState(() => db.getSchool());
+  const { user, logout, impersonatedRole, setImpersonatedRole, setActiveTenantId, activeTenantId } = useAuth();
+  const effectiveRole = impersonatedRole || user?.role;
+  const isTeacherOrStaff = effectiveRole === "guru" || effectiveRole === "dosen" || effectiveRole === "staf_sekolah" || effectiveRole === "staf_kampus";
+  const [school, setSchool] = useState(() => ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any));
   const { config: licenseConfig } = useLicense();
   const location = useLocation();
   const { theme } = useTheme();
@@ -199,13 +235,47 @@ export function Layout() {
   const [showDevSettings, setShowDevSettings] = useState(false);
   const [showPackageModal, setShowPackageModal] = useState(false);
   const profileRef = React.useRef<HTMLDivElement>(null);
+  const notifRef = React.useRef<HTMLDivElement>(null);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [selectedNotification, setSelectedNotification] = useState<any>(null);
 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingQueueCount, setPendingQueueCount] = useState(getOfflineQueueCount());
 
+  // ── Fetch Notifications ──────────────────────────────────
+  useEffect(() => {
+    const effectiveRole = impersonatedRole || user?.role;
+    if (!effectiveRole) return;
+
+    let notifRefFb;
+    if (effectiveRole === "developer") {
+      notifRefFb = query(ref(dbRealtime, "audit_logs/system_console"), limitToLast(5));
+    } else if (effectiveRole === "admin" && activeTenantId) {
+      notifRefFb = query(ref(dbRealtime, `tenants/${activeTenantId}/notifications`), limitToLast(5));
+    } else {
+      setNotifications([]);
+      return;
+    }
+
+    const unsubscribe = onValue(notifRefFb, (snapshot) => {
+      if (snapshot.exists()) {
+        const arr: any[] = [];
+        snapshot.forEach((child) => {
+          arr.push(child.val());
+        });
+        setNotifications(arr.reverse());
+      } else {
+        setNotifications([]);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [impersonatedRole, user?.role, activeTenantId]);
+
   // ── Event Listeners ──────────────────────────────────────
   useEffect(() => {
-    const handleSchoolUpdate = () => setSchool(db.getSchool());
+    const handleSchoolUpdate = () => setSchool(({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any));
     const handleOpenPackageModal = () => setShowPackageModal(true);
     window.addEventListener("school_updated", handleSchoolUpdate);
     window.addEventListener("firebase_sync_updated", handleSchoolUpdate);
@@ -298,6 +368,9 @@ export function Layout() {
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
         setIsProfileOpen(false);
       }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setIsNotifOpen(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -352,29 +425,53 @@ export function Layout() {
           children: [
             { to: "/admin/users?tab=opd", label: "Yayasan / Dinas" },
             { to: "/admin/users?tab=satker", label: "Sekolah / Kampus" },
-            { to: "/admin/school", label: "Profil & Kop Surat" },
             { to: "/admin/users?tab=jabatan", label: "Data Jabatan" },
             { to: "/admin/licenses", label: "Lisensi & Paket" },
-            { to: "/admin/recaps?tab=export", label: "Ekspor Data" },
+            { to: "/admin/recaps?tab=export", label: "Ekspor Data", isLocked: !licenseConfig.exportExcel },
           ],
+        },
+        {
+          label: "Profil & Kop Surat",
+          icon: <Building size={17} />,
+          children: [
+            { to: "/admin/school?tab=profile", label: "🏫 Profil Instansi" },
+            { to: "/admin/school?tab=kop-surat", label: "📄 Pengaturan Kop Surat" }
+          ]
         },
         { to: "/admin/academic", icon: <Calendar size={17} />, label: "Kalender Akademik" },
         { to: "/admin/holidays", icon: <CalendarCheck size={17} />, label: "Hari Libur" },
         { to: "/admin/users?role=guru", icon: <Users size={17} />, label: "Pengajar & Staf" },
         { to: "/admin/attendance", icon: <CalendarCheck size={17} />, label: "Data Presensi" },
         { to: "/admin/validation", icon: <CheckCircle2 size={17} />, label: "Validasi Offline" },
-        { to: "/admin/leave", icon: <ClipboardList size={17} />, label: "Izin & Cuti" },
+        { to: "/admin/leave", icon: <ClipboardList size={17} />, label: "Izin & Cuti", isLocked: !licenseConfig.leaveManagement },
         { to: "/admin/schedule", icon: <Calendar size={17} />, label: "Jadwal Mengajar" },
         { to: "/admin/recaps", icon: <FileText size={17} />, label: "Rekapitulasi" },
-        { to: "/admin/ai-analytics", icon: <Award size={17} />, label: "AI Analytics" },
+        { to: "/admin/ai-analytics", icon: <Award size={17} />, label: "AI Analytics", isLocked: !licenseConfig.aiAnalytics },
         { to: "/admin/generate-qr", icon: <QrCode size={17} />, label: "Buat QR Harian" },
         { to: "/admin/school-scanner", icon: <Scan size={17} />, label: "Stasiun Scan" },
+      ],
+    },
+    {
+      group: "PENGATURAN SISTEM",
+      items: [
+        {
+          label: "⚙️ Pengaturan Sistem",
+          icon: <Settings size={17} />,
+          children: [
+            { to: "/admin/school?tab=login-bg", label: "🖼️ Latar Portal Login" },
+            { to: "/admin/school?tab=kiosk-bg", label: "🖥️ Latar Live TV Kiosk" },
+            { to: "/admin/school?tab=db-utils", label: "🗄️ Manajemen Database" },
+            { to: "/admin/school?tab=log-transmisi", label: "📨 Log Transmisi & API" }
+          ]
+        },
       ],
     },
     {
       group: "AKUN SAYA",
       items: [
         { to: "/profile", icon: <UserCircle size={17} />, label: "Profil Saya" },
+        { to: "/account/security", icon: <ShieldCheck size={17} />, label: "Keamanan & login" },
+        { to: "/account/security?tab=aktivitas", icon: <History size={17} />, label: "🛡️ Aktivitas Keamanan" },
         { icon: <LogOut size={17} />, label: "Keluar", onClick: logout },
       ],
     },
@@ -393,6 +490,8 @@ export function Layout() {
       group: "AKUN SAYA",
       items: [
         { to: "/profile", icon: <UserCircle size={17} />, label: "Profil Saya" },
+        { to: "/account/security", icon: <ShieldCheck size={17} />, label: "Keamanan & login" },
+        { to: "/account/security?tab=aktivitas", icon: <History size={17} />, label: "🛡️ Aktivitas Keamanan" },
         { icon: <LogOut size={17} />, label: "Keluar", onClick: logout },
       ],
     },
@@ -413,12 +512,20 @@ export function Layout() {
           icon: <ClipboardList size={17} />,
           label: "Persetujuan Izin / Cuti",
           badge: pendingLeaveCount > 0 ? pendingLeaveCount : undefined,
+          isLocked: !licenseConfig.leaveManagement
         },
         { to: "/admin/attendance", icon: <CalendarCheck size={17} />, label: "Data Presensi" },
         { to: "/principal/recaps", icon: <FileText size={17} />, label: "Rekapitulasi" },
-        { to: "/admin/ai-analytics", icon: <Award size={17} />, label: "AI Analytics" },
+        { to: "/admin/ai-analytics", icon: <Award size={17} />, label: "AI Analytics", isLocked: !licenseConfig.aiAnalytics },
         { to: "/admin/licenses", icon: <Layers size={17} />, label: "Lisensi & Paket" },
-        { to: "/admin/school", icon: <Building size={17} />, label: "Profil & Kop Surat" },
+        {
+          label: "Profil & Kop Surat",
+          icon: <Building size={17} />,
+          children: [
+            { to: "/admin/school?tab=profile", label: "🏫 Profil Instansi" },
+            { to: "/admin/school?tab=kop-surat", label: "📄 Pengaturan Kop Surat" }
+          ]
+        },
         { to: "/teacher/scan", icon: <Scan size={17} />, label: "Presensi Mandiri (GPS)" },
       ],
     },
@@ -426,6 +533,8 @@ export function Layout() {
       group: "AKUN SAYA",
       items: [
         { to: "/profile", icon: <UserCircle size={17} />, label: "Profil Saya" },
+        { to: "/account/security", icon: <ShieldCheck size={17} />, label: "Keamanan & login" },
+        { to: "/account/security?tab=aktivitas", icon: <History size={17} />, label: "🛡️ Aktivitas Keamanan" },
         { icon: <LogOut size={17} />, label: "Keluar", onClick: logout },
       ],
     },
@@ -437,82 +546,78 @@ export function Layout() {
       items: [{ to: "/", icon: <LayoutDashboard size={17} />, label: "Beranda" }],
     },
     {
-      group: "OPERASIONAL SEKOLAH",
+      group: "KONTROL GLOBAL (SAAS)",
       items: [
+        { to: "/admin/tenants", icon: <Building size={17} />, label: "Manajemen Instansi" },
         {
-          label: "Master Data",
-          icon: <Layers size={17} />,
+          label: "Lisensi & Aktivasi",
+          icon: <Award size={17} />,
           children: [
-            { to: "/admin/users?tab=opd", label: "Yayasan / Dinas" },
-            { to: "/admin/users?tab=satker", label: "Sekolah / Kampus" },
-            { to: "/admin/school", label: "Lokasi & Geofence" },
-            { to: "/admin/users?tab=jabatan", label: "Data Jabatan" },
-            { to: "/admin/licenses", label: "Lisensi & Paket" },
-            { to: "/admin/recaps?tab=export", label: "Ekspor Data" },
+            { to: "/admin/licenses", label: "Status Lisensi" },
+            { to: "/admin/licenses?tab=activate", label: "Aktivasi Baru" },
+            { to: "/admin/licenses?tab=clients", label: "Kelola Klien" },
           ],
         },
-        { to: "/admin/academic", icon: <Calendar size={17} />, label: "Kalender Akademik" },
-        { to: "/admin/holidays", icon: <CalendarCheck size={17} />, label: "Hari Libur" },
-        { to: "/admin/users?role=guru", icon: <Users size={17} />, label: "Pengajar & Staf" },
-        { to: "/admin/attendance", icon: <CalendarCheck size={17} />, label: "Data Presensi" },
-        { to: "/admin/leave", icon: <ClipboardList size={17} />, label: "Izin & Cuti" },
-        { to: "/admin/schedule", icon: <Calendar size={17} />, label: "Jadwal Mengajar" },
-        { to: "/admin/recaps", icon: <FileText size={17} />, label: "Rekapitulasi" },
-        { to: "/admin/ai-analytics", icon: <Award size={17} />, label: "AI Analytics" },
-        { to: "/admin/generate-qr", icon: <QrCode size={17} />, label: "Buat QR Harian" },
-        { to: "/admin/school-scanner", icon: <Scan size={17} />, label: "Stasiun Scan" },
-      ],
-    },
-    {
-      group: "PLATFORM & SISTEM",
-      items: [
-        { to: "/admin/tenants", icon: <Building size={17} />, label: "Daftar Tenant" },
-        { to: "/admin/developer", icon: <Terminal size={17} />, label: "Konsol Pengembang" },
-        { to: "/admin/school", icon: <Settings size={17} />, label: "Konfigurasi Sistem" },
+        {
+          label: "Sistem & API",
+          icon: <Settings size={17} />,
+          children: [
+            { to: "/admin/system-config", label: "Konfigurasi Umum" },
+            { to: "/admin/system-config?tab=api-fonnte", label: "🔑 API Fonnte" },
+            { to: "/admin/system-config?tab=api-wablas", label: "🔑 API Wablas" },
+            { to: "/admin/system-config?tab=api-ai", label: "🧠 AI Gemini" },
+          ],
+        },
+        { to: "/admin/landing-page", icon: <LayoutTemplate size={17} />, label: "Website & Landing Page" },
+        { to: "/admin/audit-logs", icon: <ShieldCheck size={17} />, label: "Audit Keamanan" },
+        { to: "/admin/kiosk", icon: <Monitor size={17} />, label: "Pengaturan Kiosk" },
+        { to: "/admin/danger-zone", icon: <Zap size={17} className="text-rose-500" />, label: "Danger Zone", textColor: "text-rose-600" },
       ],
     },
     {
       group: "AKUN SAYA",
       items: [
         { to: "/profile", icon: <UserCircle size={17} />, label: "Profil Saya" },
+        { to: "/account/security", icon: <ShieldCheck size={17} />, label: "Keamanan & login" },
+        { to: "/account/security?tab=aktivitas", icon: <History size={17} />, label: "🛡️ Aktivitas Keamanan" },
         { icon: <LogOut size={17} />, label: "Keluar", onClick: logout },
       ],
     },
   ];
 
   const currentMenu =
-    user?.role === "developer"
+    effectiveRole === "developer"
       ? developerMenu
-      : user?.role === "admin"
+      : effectiveRole === "admin"
         ? adminMenu
-        : user?.role === "kepala_sekolah"
+        : effectiveRole === "kepala_sekolah"
           ? principalMenu
-          : user?.role === "guru" || user?.role === "dosen" || user?.role === "staf_sekolah" || user?.role === "staf_kampus"
+          : effectiveRole === "guru" || effectiveRole === "dosen" || effectiveRole === "staf_sekolah" || effectiveRole === "staf_kampus"
             ? teacherMenu
             : [];
 
   // ── Role badge info ───────────────────────────────────────
-  const roleLabel = user?.role ? (ROLE_LABELS[user.role] ?? user.role) : "Pengguna";
+  const roleLabel = effectiveRole ? (ROLE_LABELS[effectiveRole as keyof typeof ROLE_LABELS] ?? effectiveRole) : "Pengguna";
 
   const roleBadgeClass =
-    user?.role === "developer"
+    effectiveRole === "developer"
       ? "bg-amber-50 border-amber-200/80 text-amber-700"
-      : user?.role === "admin"
+      : effectiveRole === "admin"
         ? "bg-indigo-50/80 border-indigo-200/80 text-indigo-700"
-        : user?.role === "kepala_sekolah"
+        : effectiveRole === "kepala_sekolah"
           ? "bg-purple-50 border-purple-200/80 text-purple-700"
-          : user?.role === "guru" || user?.role === "dosen"
+          : effectiveRole === "guru" || effectiveRole === "dosen"
             ? "bg-emerald-50 border-emerald-200/80 text-emerald-700"
             : "bg-slate-100 border-slate-200/80 text-slate-700";
 
   const roleBadgeIcon =
-    user?.role === "developer" ? <Terminal size={12} className="text-amber-600 shrink-0" /> :
-      user?.role === "admin" ? <ShieldCheck size={12} className="text-indigo-600 shrink-0" /> :
-        user?.role === "kepala_sekolah" ? <Award size={12} className="text-purple-600 shrink-0" /> :
+    effectiveRole === "developer" ? <Terminal size={12} className="text-amber-600 shrink-0" /> :
+      effectiveRole === "admin" ? <ShieldCheck size={12} className="text-indigo-600 shrink-0" /> :
+        effectiveRole === "kepala_sekolah" ? <Award size={12} className="text-purple-600 shrink-0" /> :
           <UserCircle size={12} className="text-current shrink-0" />;
 
   const avatarClass =
-    user?.role === "developer"
+    effectiveRole === "developer"
       ? "bg-gradient-to-br from-amber-400 to-orange-500 shadow-md shadow-amber-500/30"
       : "bg-gradient-to-br from-indigo-500 to-purple-600 shadow-md shadow-indigo-500/30";
 
@@ -577,18 +682,36 @@ export function Layout() {
           {/* Nav */}
           <nav className="flex-1 py-3 px-2.5 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/20">
             {currentMenu.map((section, idx) => (
-              <div key={idx} className="mb-4 last:mb-0">
-                {section.group && (
-                  <div className="px-3 text-[9.5px] font-black uppercase tracking-[0.15em] mb-1.5 text-white/40">
-                    {section.group}
+              <React.Fragment key={idx}>
+                {/* KONDISI 1: Tampilkan Pilihan Role HANYA jika murni Developer dan SEDANG TIDAK menyamar */}
+                {section.group === "AKUN SAYA" && user?.role === 'developer' && !impersonatedRole && (
+                  <div className="mb-4">
+                    <div className="px-3 text-[9.5px] font-black uppercase tracking-[0.15em] mb-1.5 text-amber-400/80">
+                      ⚙️ Alat Developer (Uji Lab)
+                    </div>
+                    <div className="space-y-0.5">
+                       <button onClick={() => setImpersonatedRole('admin')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 text-sm border border-transparent text-white/75 hover:bg-white/12 hover:text-white cursor-pointer">👁️ Uji sbg Admin</button>
+                       <button onClick={() => setImpersonatedRole('kepala_sekolah')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 text-sm border border-transparent text-white/75 hover:bg-white/12 hover:text-white cursor-pointer">👁️ Uji sbg Kepsek</button>
+                       <button onClick={() => setImpersonatedRole('guru')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 text-sm border border-transparent text-white/75 hover:bg-white/12 hover:text-white cursor-pointer">👁️ Uji sbg Guru</button>
+                       <button onClick={() => setImpersonatedRole('staf_sekolah')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 text-sm border border-transparent text-white/75 hover:bg-white/12 hover:text-white cursor-pointer">👁️ Uji sbg Staf</button>
+                    </div>
                   </div>
                 )}
-                <div className="space-y-0.5">
-                  {section.items.map((item, itemIdx) => (
-                    <NavGroup key={itemIdx} item={item} currentPath={location.pathname} />
-                  ))}
+
+                {/* KONDISI 2: PINTU DARURAT. Tampilkan tombol Keluar HANYA jika mode penyamaran sedang aktif, apa pun role sementaranya */}
+                <div className="mb-4 last:mb-0">
+                  {section.group && (
+                    <div className="px-3 text-[9.5px] font-black uppercase tracking-[0.15em] mb-1.5 text-white/40">
+                      {section.group}
+                    </div>
+                  )}
+                  <div className="space-y-0.5">
+                    {section.items.map((item, itemIdx) => (
+                      <NavGroup key={itemIdx} item={item} currentPath={location.pathname} />
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </React.Fragment>
             ))}
           </nav>
 
@@ -616,11 +739,25 @@ export function Layout() {
 
       {/* ── MAIN CONTENT ───────────────────────────────────── */}
       <main className={cn("flex-1 flex flex-col overflow-hidden print:overflow-visible print:block print:bg-white bg-slate-50 min-w-0 relative", isTeacherOrStaff ? "pb-16" : "")}>
+        {impersonatedRole && (
+          <div className="fixed bottom-20 right-4 z-[9999]">
+            <button 
+              onClick={() => {
+                if (setImpersonatedRole) setImpersonatedRole(null);
+                if (setActiveTenantId) setActiveTenantId('GLOBAL');
+                window.location.href = '/';
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-full shadow-2xl border-2 border-white animate-pulse"
+            >
+              🚨 KELUAR UJI LAB
+            </button>
+          </div>
+        )}
         {isTeacherOrStaff && <WindowControls />}
         {/* TOPBAR */}
         <header className={cn(
           "print:hidden h-14 bg-white items-center justify-between px-3 sm:px-5 shrink-0 relative z-10 border-b border-slate-200 shadow-sm gap-2",
-          isTeacherOrStaff ? "hidden md:flex" : "flex"
+          isTeacherOrStaff ? "hidden" : "flex"
         )}>
           {/* Kiri: hamburger + badge role */}
           <div className="flex items-center gap-2 min-w-0">
@@ -642,52 +779,18 @@ export function Layout() {
             </span>
 
             {/* Lisensi badge */}
-            <button
-              onClick={() => setShowPackageModal(true)}
-              className={cn(
-                "hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold tracking-wide uppercase border shadow-xs transition-all hover:scale-[1.02] active:scale-95 cursor-pointer whitespace-nowrap shrink-0",
-                licenseConfig.badgeColor
-              )}
-              title="Klik untuk lihat detail & aktivasi lisensi paket"
-            >
-              <Award size={12} className="shrink-0" />
-              <span>{licenseConfig.name}</span>
-            </button>
-
-            {/* Edit mode — developer only */}
-            {user?.role === "developer" && (
-              <div className="hidden sm:flex items-center gap-1.5">
-                <button
-                  onClick={toggleEditMode}
-                  className={cn(
-                    "flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap border cursor-pointer",
-                    isEditMode
-                      ? "bg-indigo-600 text-white border-indigo-700"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200 border-slate-200/80"
-                  )}
-                  title="Aktifkan/Nonaktifkan Mode Edit Teks"
-                >
-                  {isEditMode ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
-                  <span>{isEditMode ? "Edit ON" : "Edit OFF"}</span>
-                </button>
-                {isEditMode && (
-                  <>
-                    <button
-                      onClick={saveEdits}
-                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold transition border border-emerald-700 cursor-pointer"
-                    >
-                      <Save size={11} /> Simpan
-                    </button>
-                    <button
-                      onClick={() => setShowDevSettings(true)}
-                      className="flex items-center justify-center w-6 h-6 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 transition cursor-pointer"
-                      title="Pengaturan Tema & Logo"
-                    >
-                      <Settings size={12} />
-                    </button>
-                  </>
+            {effectiveRole !== "developer" && effectiveRole !== "superadmin" && (
+              <button
+                onClick={() => setShowPackageModal(true)}
+                className={cn(
+                  "hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold tracking-wide uppercase border shadow-xs transition-all hover:scale-[1.02] active:scale-95 cursor-pointer whitespace-nowrap shrink-0",
+                  licenseConfig.badgeColor
                 )}
-              </div>
+                title="Klik untuk lihat detail & aktivasi lisensi paket"
+              >
+                <Award size={12} className="shrink-0" />
+                <span>{licenseConfig.name}</span>
+              </button>
             )}
 
             {/* Nama sekolah */}
@@ -702,7 +805,46 @@ export function Layout() {
           </div>
 
           {/* Kanan: status koneksi + profil */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-3 shrink-0">
+            {/* Ikon Notifikasi (Global) */}
+            <div className="relative" ref={notifRef}>
+              <button
+                onClick={() => setIsNotifOpen(!isNotifOpen)}
+                className="p-2 text-slate-500 hover:text-indigo-600 transition-colors relative flex items-center justify-center rounded-lg hover:bg-slate-100 cursor-pointer"
+                title="Notifikasi"
+              >
+                <Bell size={18} />
+                {notifications.length > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 border-2 border-white rounded-full"></span>
+                )}
+              </button>
+
+              {isNotifOpen && (
+                <div className="absolute top-11 right-0 w-80 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-fade-in">
+                  <div className="px-4 py-2 border-b border-slate-50 font-bold text-slate-700">Notifikasi</div>
+                  <div className="max-h-80 overflow-y-auto flex flex-col scrollbar-thin scrollbar-thumb-slate-200">
+                    {notifications.length > 0 ? (
+                      notifications.map((notif: any, idx: number) => (
+                        <div 
+                          key={idx} 
+                          onClick={() => { setSelectedNotification(notif); setIsNotifOpen(false); }}
+                          className="px-4 py-3 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors cursor-pointer"
+                        >
+                          <p className="text-sm font-semibold text-slate-800">{notif.title || notif.action || "Pemberitahuan Sistem"}</p>
+                          <p className="text-xs text-slate-500 mt-1 line-clamp-2">{notif.message || notif.details || "Ada aktivitas baru yang tercatat di sistem."}</p>
+                          <p className="text-[10px] text-slate-400 mt-2">
+                            {notif.timestamp ? new Date(notif.timestamp).toLocaleString("id-ID") : "Baru saja"}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="px-4 py-8 text-center text-sm text-slate-400">Belum ada notifikasi baru.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Status koneksi */}
             {isOnline && pendingQueueCount === 0 ? (
               <div
@@ -830,6 +972,46 @@ export function Layout() {
                 </button>
               </div>
               <PackageActivationCard isModal />
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── NOTIFICATION DETAIL MODAL ────────────────────── */}
+      {selectedNotification && (
+        <div className="fixed inset-0 bg-black/50 z-[999] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm" onClick={() => setSelectedNotification(null)}>
+          <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md relative flex flex-col max-h-[80vh]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4 shrink-0">
+              <h3 className="font-bold text-slate-800 text-lg">
+                {selectedNotification.title || selectedNotification.action || "Pemberitahuan Sistem"}
+              </h3>
+              <button 
+                onClick={() => setSelectedNotification(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 flex-1 pr-1">
+              <div className="mb-4">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 text-xs font-semibold">
+                  <Calendar size={12} />
+                  {selectedNotification.timestamp ? new Date(selectedNotification.timestamp).toLocaleString("id-ID") : "Baru saja"}
+                </span>
+              </div>
+              
+              <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap break-words bg-slate-50 p-4 rounded-xl border border-slate-100">
+                {selectedNotification.message || selectedNotification.details || "Tidak ada detail tambahan."}
+              </div>
+            </div>
+            
+            <div className="mt-5 pt-3 border-t border-slate-100 flex justify-end shrink-0">
+              <button
+                onClick={() => setSelectedNotification(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded-xl transition-colors shadow-sm"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>

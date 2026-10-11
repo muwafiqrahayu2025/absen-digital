@@ -8,7 +8,9 @@ import { dbRealtime, getTenantRef } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 
 export function DeviceRegistrationModal() {
-  const { user } = useAuth();
+  return null; // Function disabled per user request
+  
+  const { user, activeTenantId } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [regCode, setRegCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,6 +19,12 @@ export function DeviceRegistrationModal() {
     const checkSlate = async () => {
       // 1. Hanya tampilkan modal setelah login sebagai Admin atau Kepala Sekolah / Rektor
       if (!user || (user.role !== 'admin' && user.role !== 'kepala_sekolah')) {
+        setIsOpen(false);
+        return;
+      }
+
+      // 1.5. Bypass modal registrasi untuk pengguna Akun Demo / Trial
+      if (activeTenantId === 'tenant_demo') {
         setIsOpen(false);
         return;
       }
@@ -87,12 +95,12 @@ export function DeviceRegistrationModal() {
         } else {
           // Simpan data master inisial ke IDB jika cloud kosong
           db.setUsers(db.getUsers());
-          db.setSchool(db.getSchool());
+          db.setSchool(({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any));
         }
       } catch (err) {
         // Fallback simpan data master inisial jika fetch cloud terganggu
         db.setUsers(db.getUsers());
-        db.setSchool(db.getSchool());
+        db.setSchool(({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any));
       }
 
       toast.success('Registrasi Perangkat Berhasil! Data Master tersimpan di IndexedDB terenkripsi.', { id: toastId });

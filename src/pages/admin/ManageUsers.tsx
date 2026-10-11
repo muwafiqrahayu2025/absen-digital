@@ -27,7 +27,7 @@ export function ManageUsers() {
   const satuanKerjas = React.useMemo(() => Array.isArray(satkersData) ? satkersData : Object.values(satkersData || {}), [satkersData]) as SatuanKerja[];
   const jabatans = React.useMemo(() => Array.isArray(jabatansData) ? jabatansData : Object.values(jabatansData || {}), [jabatansData]) as Jabatan[];
 
-  const school = schoolData || db.getSchool();
+  const school = schoolData || ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
   const yayasanName = "YAYASAN " + (school.name || "AL-HIDAYAH").replace(/^(mts\.|smp|sma|ma|sd|mi)\s+/i, "").toUpperCase();
 
   // Search filter
@@ -39,6 +39,7 @@ export function ManageUsers() {
   const [isSatkerModalOpen, setIsSatkerModalOpen] = useState(false);
   // MIN-02 FIX: typo corrected from isJababanModalOpen to isJabatanModalOpen
   const [isJabatanModalOpen, setIsJabatanModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Edit target states
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -210,11 +211,16 @@ export function ManageUsers() {
   const handleUserSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
-    const id = editingUser ? editingUser.id : Math.random().toString(36).substring(2, 9);
-    const updatedUser = { ...userForm, id };
-    await set(getTenantRef(`users/${id}`), updatedUser);
-    toast.success(editingUser ? "Pembaruan data pegawai berhasil disimpan!" : "Guru/Staf baru berhasil didaftarkan!");
-    setIsUserModalOpen(false);
+    setIsSaving(true);
+    try {
+      const id = editingUser ? editingUser.id : Math.random().toString(36).substring(2, 9);
+      const updatedUser = { ...userForm, id };
+      await set(getTenantRef(`users/${id}`), updatedUser);
+      toast.success(editingUser ? "Pembaruan data pegawai berhasil disimpan!" : "Guru/Staf baru berhasil didaftarkan!");
+      setIsUserModalOpen(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleOpdSave = async (e: React.FormEvent) => {
@@ -225,25 +231,24 @@ export function ManageUsers() {
       toast.error("Error: Data Sekolah (tenantId) tidak valid! Silakan relogin.");
       return;
     }
-    const singkatan = (opdForm.singkatan || opdForm.nama).toUpperCase();
-    const nama = opdForm.nama.toUpperCase();
-    const id = editingOpd ? editingOpd.id : String(Date.now());
-    const updatedOpd = { id, singkatan, nama };
-    
-    const dbPath = `opds/${id}`;
-    const fullRef = getTenantRef(dbPath);
-    console.log("=== DEBUG YAYASAN/OPD SAVE ===");
-    console.log("PATH REF: ", fullRef.toString());
-    console.log("TENANT ID: ", localStorage.getItem("abdi_active_tenant_id"));
-    console.log("PAYLOAD: ", updatedOpd);
-
+    setIsSaving(true);
     try {
+      const singkatan = (opdForm.singkatan || opdForm.nama).toUpperCase();
+      const nama = opdForm.nama.toUpperCase();
+      const id = editingOpd ? editingOpd.id : String(Date.now());
+      const updatedOpd = { id, singkatan, nama };
+      
+      const dbPath = `opds/${id}`;
+      const fullRef = getTenantRef(dbPath);
+
       await set(fullRef, updatedOpd);
       toast.success(editingOpd ? "OPD berhasil diubah" : "OPD Baru berhasil ditambahkan");
       setIsOpdModalOpen(false);
     } catch (error: any) {
       console.error("FIREBASE ERROR ON SAVE OPD:", error);
-      toast.error(`Akses Ditolak! Path: ${dbPath}`);
+      toast.error(`Akses Ditolak! Path: opds`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -255,49 +260,59 @@ export function ManageUsers() {
       toast.error("Error: Data Sekolah (tenantId) tidak valid! Silakan relogin.");
       return;
     }
-    const singkatan = (satkerForm.singkatan || satkerForm.nama).toUpperCase();
-    const nama = satkerForm.nama.toUpperCase();
-    const id = editingSatker ? editingSatker.id : String(Date.now());
-    const updatedSatker = { id, singkatan, nama, opdId: satkerForm.opdId };
-    await set(getTenantRef(`satuanKerjas/${id}`), updatedSatker);
-    toast.success(editingSatker ? "Satuan Kerja berhasil diubah" : "Satuan Kerja baru didaftarkan");
-    setIsSatkerModalOpen(false);
+    setIsSaving(true);
+    try {
+      const singkatan = (satkerForm.singkatan || satkerForm.nama).toUpperCase();
+      const nama = satkerForm.nama.toUpperCase();
+      const id = editingSatker ? editingSatker.id : String(Date.now());
+      const updatedSatker = { id, singkatan, nama, opdId: satkerForm.opdId };
+      await set(getTenantRef(`satuanKerjas/${id}`), updatedSatker);
+      toast.success(editingSatker ? "Satuan Kerja berhasil diubah" : "Satuan Kerja baru didaftarkan");
+      setIsSatkerModalOpen(false);
 
-    // Otomatis ganti nama Instansi Utama (SMA / SMP / Kampus Unggulan Nusantara) ketika user menginput data di satuan kerja
-    const currentSchool = school;
-    if (currentSchool) {
-      const isDefaultSchoolName =
-        currentSchool.name === "SMA / SMP / Kampus Unggulan Nusantara" ||
-        currentSchool.name.toUpperCase() === "SMA / SMP / KAMPUS UNGGULAN NUSANTARA" ||
-        currentSchool.name.includes("Kampus Unggulan Nusantara");
+      // Otomatis ganti nama Instansi Utama (SMA / SMP / Kampus Unggulan Nusantara) ketika user menginput data di satuan kerja
+      const currentSchool = school;
+      if (currentSchool) {
+        const isDefaultSchoolName =
+          currentSchool.name === "SMA / SMP / Kampus Unggulan Nusantara" ||
+          currentSchool.name.toUpperCase() === "SMA / SMP / KAMPUS UNGGULAN NUSANTARA" ||
+          currentSchool.name.includes("Kampus Unggulan Nusantara");
 
-      if (isDefaultSchoolName || !editingSatker) {
-        const updatedSchool = {
-          ...currentSchool,
-          name: nama,
-          nama_instansi: nama,
-          kopSurat: {
-            ...(currentSchool.kopSurat || {}),
+        if (isDefaultSchoolName || !editingSatker) {
+          const updatedSchool = {
+            ...currentSchool,
+            name: nama,
             nama_instansi: nama,
+            kopSurat: {
+              ...(currentSchool.kopSurat || {}),
+              nama_instansi: nama,
+            }
+          };
+          await set(getTenantRef('school'), updatedSchool);
+          if (isDefaultSchoolName) {
+            toast.success(`🎉 Nama Instansi & Kop Surat otomatis diganti menjadi: ${nama}`, { duration: 4500 });
           }
-        };
-        await set(getTenantRef('school'), updatedSchool);
-        if (isDefaultSchoolName) {
-          toast.success(`🎉 Nama Instansi & Kop Surat otomatis diganti menjadi: ${nama}`, { duration: 4500 });
         }
       }
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleJabatanSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
-    const finalNama = jabForm.kategori === "Lainnya" ? jabForm.nama : `${jabForm.kategori} ${jabForm.keterangan}`.trim();
-    const id = editingJabatan ? editingJabatan.id : String(Date.now());
-    const updatedJabatan = { id, nama: finalNama };
-    await set(getTenantRef(`jabatans/${id}`), updatedJabatan);
-    toast.success(editingJabatan ? "Formasi Jabatan berhasil diubah" : "Formasi Jabatan baru ditambahkan");
-    setIsJabatanModalOpen(false);
+    setIsSaving(true);
+    try {
+      const finalNama = jabForm.kategori === "Lainnya" ? jabForm.nama : `${jabForm.kategori} ${jabForm.keterangan}`.trim();
+      const id = editingJabatan ? editingJabatan.id : String(Date.now());
+      const updatedJabatan = { id, nama: finalNama };
+      await set(getTenantRef(`jabatans/${id}`), updatedJabatan);
+      toast.success(editingJabatan ? "Formasi Jabatan berhasil diubah" : "Formasi Jabatan baru ditambahkan");
+      setIsJabatanModalOpen(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Filter lists based on Search bar
@@ -913,9 +928,10 @@ export function ManageUsers() {
                 ><X size={16} /> Batal</button>
                 <button
                   type="submit"
-                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
+                  disabled={isSaving}
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  <Save className="w-4 h-4" /> {editingUser ? "Simpan Perubahan" : "Tambah Personel"}
+                  <Save className="w-4 h-4" /> {isSaving ? "Menyimpan..." : (editingUser ? "Simpan Perubahan" : "Tambah Personel")}
                 </button>
               </div>
             </form>
@@ -965,9 +981,10 @@ export function ManageUsers() {
                 ><X size={16} /> Batal</button>
                 <button
                   type="submit"
-                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
+                  disabled={isSaving}
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  <Save className="w-4 h-4" /> Simpan Lembaga
+                  <Save className="w-4 h-4" /> {isSaving ? "Menyimpan..." : "Simpan Lembaga"}
                 </button>
               </div>
             </form>
@@ -1035,9 +1052,10 @@ export function ManageUsers() {
                 ><X size={16} /> Batal</button>
                 <button
                   type="submit"
-                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
+                  disabled={isSaving}
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  <Save className="w-4 h-4" /> Simpan Satuan Kerja
+                  <Save className="w-4 h-4" /> {isSaving ? "Menyimpan..." : "Simpan Satuan Kerja"}
                 </button>
               </div>
             </form>
@@ -1112,9 +1130,10 @@ export function ManageUsers() {
                 ><X size={16} /> Batal</button>
                 <button
                   type="submit"
-                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
+                  disabled={isSaving}
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  <Save className="w-4 h-4" /> Simpan Jabatan
+                  <Save className="w-4 h-4" /> {isSaving ? "Menyimpan..." : "Simpan Jabatan"}
                 </button>
               </div>
             </form>

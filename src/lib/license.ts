@@ -70,72 +70,6 @@ export const PLAN_CONFIG: Record<LicensePlan, PlanConfigItem> = {
     description: 'Nikmati seluruh fitur penuh tanpa batas personel dengan kontribusi infaq sukarela / seikhlasnya demi keberlanjutan aplikasi.',
     badgeColor: 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-blue-700 shadow-lg shadow-blue-500/30',
   },
-  starter: {
-    name: 'Paket Starter (Arsip)',
-    plan: 'starter',
-    durationString: '1 Tahun Ajaran',
-    durationDays: 365,
-    maxUsers: 30,
-    maxUsersString: '30 Guru & Staf',
-    gpsSelfie: true,
-    scanQr: true,
-    whatsappNotif: true,
-    exportPdf: true,
-    exportExcel: true,
-    leaveManagement: true,
-    fullRecap: true,
-    aiAnalytics: false,
-    multiSchool: false,
-    prioritySupport: false,
-    pricePerMonth: 149000,
-    priceString: 'Rp 149.000 / bln',
-    description: 'Solusi hemat bagi sekolah tingkat SMP/MTs, SMA/SMK, atau SD dengan personel terbatas.',
-    badgeColor: 'bg-blue-600 text-white border-blue-700',
-  },
-  pro: {
-    name: 'Paket Pro (Arsip)',
-    plan: 'pro',
-    durationString: '1 Tahun Ajaran',
-    durationDays: 365,
-    maxUsers: 100,
-    maxUsersString: '100 Guru & Staf',
-    gpsSelfie: true,
-    scanQr: true,
-    whatsappNotif: true,
-    exportPdf: true,
-    exportExcel: true,
-    leaveManagement: true,
-    fullRecap: true,
-    aiAnalytics: true,
-    multiSchool: false,
-    prioritySupport: false,
-    pricePerMonth: 349000,
-    priceString: 'Rp 349.000 / bln',
-    description: 'Pilihan terpopuler untuk sekolah menengah besar (SMA/SMK/MA) maupun perguruan tinggi/fakultas.',
-    badgeColor: 'bg-indigo-600 text-white border-indigo-700 shadow-lg shadow-indigo-500/30',
-  },
-  enterprise: {
-    name: 'Paket Enterprise (Arsip)',
-    plan: 'enterprise',
-    durationString: '1 Tahun Ajaran',
-    durationDays: 365,
-    maxUsers: 999999,
-    maxUsersString: 'Tak Terbatas (Unlimited)',
-    gpsSelfie: true,
-    scanQr: true,
-    whatsappNotif: true,
-    exportPdf: true,
-    exportExcel: true,
-    leaveManagement: true,
-    fullRecap: true,
-    aiAnalytics: true,
-    multiSchool: true,
-    prioritySupport: true,
-    pricePerMonth: 799000,
-    priceString: 'Rp 799.000 / bln',
-    description: 'Dirancang khusus untuk Yayasan Pendidikan besar atau Universitas dengan banyak cabang / kampus.',
-    badgeColor: 'bg-gradient-to-r from-purple-600 to-pink-600 text-white border-purple-700',
-  },
   hibah: {
     name: 'Paket Hibah Khusus',
     plan: 'hibah',
@@ -252,11 +186,8 @@ export const activateByToken = (
 
   let targetPlan: LicensePlan = "full"; // default fallback for new general token
   if (upper.includes("FULL") || upper.includes("INFAQ") || upper.includes("DONASI") || upper.includes("SEIKHLASNYA")) targetPlan = "full";
-  else if (upper.includes("STARTER")) targetPlan = "starter";
-  else if (upper.includes("ENTERPRISE")) targetPlan = "enterprise";
   else if (upper.includes("HIBAH") || upper.includes("FREE") || upper.includes("VIP")) targetPlan = "hibah";
   else if (upper.includes("TRIAL")) targetPlan = "trial";
-  else if (upper.includes("PRO")) targetPlan = "pro";
 
   const config = PLAN_CONFIG[targetPlan];
   const now = new Date();

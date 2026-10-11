@@ -9,7 +9,7 @@ export function PrintRecap() {
 
   const users = db.getUsers();
   const allAttendance = db.getAttendance();
-  const school = db.getSchool();
+  const school: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
   const activeAcademicYear = db.getAcademicYears().find((ay) => ay && ay.isActive);
 
   useEffect(() => {

@@ -50,7 +50,7 @@ export function GenerateQR() {
   const [sessionName, setSessionName] = useState("Absensi Harian");
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const school = db.getSchool();
+  const school: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
   const [logoUrl, setLogoUrl] = useState<string>(() => {
     const saved = localStorage.getItem("qr_embedded_logo_admin");
     return saved || school.logoUrl || "/logo.png";
@@ -98,7 +98,7 @@ export function GenerateQR() {
 
   const [kioskBgUrl, setKioskBgUrl] = useState<string>(() => {
     const saved = localStorage.getItem("qr_kiosk_bg_url");
-    const schoolData = db.getSchool();
+    const schoolData: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
     return (saved && saved.trim() !== "")
       ? saved
       : (schoolData.kioskBgUrl && schoolData.kioskBgUrl.trim() !== "")
@@ -108,20 +108,20 @@ export function GenerateQR() {
 
   const [youtubeVideoUrl, setYoutubeVideoUrl] = useState<string>(() => {
     const saved = localStorage.getItem("qr_youtube_video_url");
-    const schoolData = db.getSchool();
+    const schoolData: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
     return (saved !== null && saved.trim() !== "") ? saved : (schoolData.youtubeVideoUrl || "");
   });
 
   const [marqueeText, setMarqueeText] = useState<string>(() => {
     const saved = localStorage.getItem("qr_marquee_text");
-    const schoolData = db.getSchool();
+    const schoolData: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
     return (saved !== null && saved !== undefined) ? saved : (schoolData.marqueeText || "");
   });
 
   useEffect(() => {
     const handleStorageSync = () => {
       const saved = localStorage.getItem("qr_kiosk_bg_url");
-      const schoolData = db.getSchool();
+      const schoolData: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
       const latestBg = saved || schoolData.kioskBgUrl || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1920&q=80";
       setKioskBgUrl(latestBg);
 
@@ -173,7 +173,7 @@ export function GenerateQR() {
           const base64 = canvas.toDataURL("image/jpeg", 0.85);
           setKioskBgUrl(base64);
           localStorage.setItem("qr_kiosk_bg_url", base64);
-          const currentSchool = db.getSchool();
+          const currentSchool = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
           db.updateSchool({ ...currentSchool, kioskBgUrl: base64 });
           window.dispatchEvent(new Event("storage"));
           window.dispatchEvent(new Event("school_updated"));
@@ -195,7 +195,7 @@ export function GenerateQR() {
     }
     setKioskBgUrl(DEFAULT_KIOSK_BG_URL);
     localStorage.removeItem("qr_kiosk_bg_url");
-    const currentSchool = db.getSchool();
+    const currentSchool = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
     db.updateSchool({ ...currentSchool, kioskBgUrl: "" });
     window.dispatchEvent(new Event("storage"));
     window.dispatchEvent(new Event("firebase_sync_updated"));
@@ -206,7 +206,7 @@ export function GenerateQR() {
   const handleSaveYoutubeUrl = () => {
     const trimmed = youtubeVideoUrl.trim();
     localStorage.setItem("qr_youtube_video_url", trimmed);
-    const currentSchool = db.getSchool();
+    const currentSchool = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
     db.updateSchool({ ...currentSchool, youtubeVideoUrl: trimmed });
     window.dispatchEvent(new Event("storage"));
     window.dispatchEvent(new Event("school_updated"));
@@ -220,7 +220,7 @@ export function GenerateQR() {
     }
     const trimmed = marqueeText.trim();
     localStorage.setItem("qr_marquee_text", trimmed);
-    const currentSchool = db.getSchool();
+    const currentSchool = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
     db.updateSchool({ ...currentSchool, marqueeText: trimmed });
     window.dispatchEvent(new Event("storage"));
     window.dispatchEvent(new Event("firebase_sync_updated"));
@@ -238,7 +238,7 @@ export function GenerateQR() {
     }
     setMarqueeText("");
     localStorage.removeItem("qr_marquee_text");
-    const currentSchool = db.getSchool();
+    const currentSchool = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
     db.updateSchool({ ...currentSchool, marqueeText: "" });
     window.dispatchEvent(new Event("storage"));
     window.dispatchEvent(new Event("firebase_sync_updated"));
@@ -329,7 +329,7 @@ export function GenerateQR() {
   useEffect(() => {
     const syncSettings = () => {
       const savedBg = localStorage.getItem("qr_kiosk_bg_url");
-      const latestSchool = db.getSchool();
+      const latestSchool = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
       const activeBg = (savedBg && savedBg.trim() !== "")
         ? savedBg
         : (latestSchool.kioskBgUrl && latestSchool.kioskBgUrl.trim() !== "")
@@ -824,8 +824,8 @@ export function GenerateQR() {
         <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
           <h3 className="font-bold text-slate-800">Tren Partisipasi Presensi</h3>
         </div>
-        <div className="p-4 h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
+        <div style={{ width: '100%', minHeight: '300px' }} className="p-4">
+          <ResponsiveContainer width="100%" height={300}>
             <LineChart
               data={trendData}
               margin={{ top: 10, right: 30, left: 0, bottom: 0 }}

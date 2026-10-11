@@ -15,27 +15,31 @@ export interface OfflineSyncItem {
   retryCount?: number;
 }
 
-const OFFLINE_QUEUE_KEY = 'offline_sync_queue';
+let memoryQueue: OfflineSyncItem[] = [];
+
+// Initialize memory queue from IndexedDB on startup
+idbStorage.getItem('offline_sync_queue', 'queue').then(data => {
+  if (data && Array.isArray(data)) {
+    memoryQueue = data;
+    window.dispatchEvent(new Event('offline_sync_queue_changed'));
+  }
+});
 
 export function getOfflineQueue(): OfflineSyncItem[] {
-  try {
-    const stored = localStorage.getItem(OFFLINE_QUEUE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch (e) {
-    return [];
-  }
+  return memoryQueue;
 }
 
 export function getOfflineQueueCount(): number {
-  return getOfflineQueue().length;
+  return memoryQueue.length;
 }
 
 function saveOfflineQueue(queue: OfflineSyncItem[]) {
   try {
-    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+    memoryQueue = queue;
+    idbStorage.setItem('offline_sync_queue', 'queue', queue);
     window.dispatchEvent(new Event('offline_sync_queue_changed'));
   } catch (e) {
-    console.error("Failed to save offline sync queue:", e);
+    console.error("Failed to save offline sync queue to IDB:", e);
   }
 }
 
@@ -67,28 +71,42 @@ export async function processOfflineQueue(): Promise<{ synced: number; pending: 
   const queue = getOfflineQueue();
   if (queue.length === 0) {
     // Check if there are any locally stored attendance records waiting that aren't in queue
+    // [C2] Perbaikan Data Destruction & Stacking
+    // Alih-alih melakukan set() ke root 'attendance', kita kirim record satu per satu.
+
+    // ── [BUG-003 FIX] Definisikan `attendance` sebelum digunakan ─────────
+    // Sebelumnya variabel ini tidak terdefinisi di scope ini, menyebabkan
+    // ReferenceError: attendance is not defined saat runtime.
     const attendance = db.getAttendance();
-    const hasUnsynced = attendance.some(a => !a.isSynced || !(a as any).is_synced);
-    if (hasUnsynced && navigator.onLine) {
-      try {
-        const aMap = attendance.reduce((acc, att) => {
-          const syncedAtt = { ...att, isSynced: true, is_synced: true, syncStatus: 'synced', syncError: undefined };
-          acc[att.id] = syncedAtt;
-          return acc;
-        }, {} as Record<string, any>);
-        await set(getTenantRef('attendance'), aMap);
-        const updatedAttendance = attendance.map(a => ({
-          ...a,
-          isSynced: true,
-          is_synced: true,
-          syncStatus: 'synced',
-          syncError: undefined
-        }));
-        localStorage.setItem('attendance', JSON.stringify(updatedAttendance));
-        window.dispatchEvent(new Event('attendance_synchronized'));
+
+    const unsyncedRecords = attendance.filter(a => !a.isSynced || !(a as any).is_synced);
+    if (unsyncedRecords.length > 0 && navigator.onLine) {
+      console.log(`[Offline-Online Sync] Menemukan ${unsyncedRecords.length} data absensi lokal belum tersinkron.`);
+      let syncedCount = 0;
+      const updatedAttendance = [...attendance];
+
+      await Promise.allSettled(
+        unsyncedRecords.map(async (att) => {
+          try {
+            const syncedAtt = { ...att, isSynced: true, is_synced: true, syncStatus: 'synced' as const, syncError: undefined };
+            // KIRIM SECARA INDIVIDUAL ke node-nya masing-masing
+            await set(getTenantRef(`attendance/${att.id}`), syncedAtt);
+            
+            // Tandai sukses di lokal
+            const idx = updatedAttendance.findIndex(a => a.id === att.id);
+            if (idx !== -1) {
+              updatedAttendance[idx] = syncedAtt;
+            }
+            syncedCount++;
+          } catch (e) {
+            console.warn(`[Offline-Online Sync] Gagal sinkron absen ${att.id}:`, e);
+          }
+        })
+      );
+
+      if (syncedCount > 0) {
+        db.setAttendance(updatedAttendance);
         window.dispatchEvent(new Event('firebase_sync_updated'));
-      } catch (e) {
-        console.warn("[Offline-Online Sync] Background attendance push check failed:", e);
       }
     }
     return { synced: 0, pending: 0 };
@@ -111,11 +129,10 @@ export async function processOfflineQueue(): Promise<{ synced: number; pending: 
           ...a,
           isSynced: true,
           is_synced: true,
-          syncStatus: 'synced',
+          syncStatus: 'synced' as const,
           syncError: undefined
         }));
-        localStorage.setItem('attendance', JSON.stringify(updatedAttendance));
-        window.dispatchEvent(new Event('attendance_synchronized'));
+        db.setAttendance(updatedAttendance);
       }
     } catch (error: any) {
       console.warn(`[Offline-Online Sync] Gagal sinkronisasi antrean ${item.path}:`, error);
@@ -158,13 +175,12 @@ export const pushToFirebase = async (path: string, data: any): Promise<boolean> 
       const updatedAttendance = attendance.map(a => {
         if (!a.isSynced || !(a as any).is_synced) {
           modified = true;
-          return { ...a, isSynced: true, is_synced: true, syncStatus: 'synced', syncError: undefined };
+          return { ...a, isSynced: true, is_synced: true, syncStatus: 'synced' as const, syncError: undefined };
         }
         return a;
       });
       if (modified) {
-        localStorage.setItem('attendance', JSON.stringify(updatedAttendance));
-        window.dispatchEvent(new Event('attendance_synchronized'));
+        db.setAttendance(updatedAttendance);
       }
     }
     return true;

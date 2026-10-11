@@ -5,6 +5,7 @@ const DB_VERSION = 1;
 
 export interface IDBStoreNames {
   attendance_logs: string;
+  offline_sync_queue: string;
   device_config: 'reg_token' | 'last_sync';
 }
 
@@ -33,6 +34,9 @@ class IDBStorage {
         const db = (event.target as IDBOpenDBRequest).result;
         if (!db.objectStoreNames.contains('attendance_logs')) {
           db.createObjectStore('attendance_logs');
+        }
+        if (!db.objectStoreNames.contains('offline_sync_queue')) {
+          db.createObjectStore('offline_sync_queue');
         }
         if (!db.objectStoreNames.contains('device_config')) {
           db.createObjectStore('device_config');
@@ -164,18 +168,10 @@ class IDBStorage {
   }
 
   /**
-   * Sinkronisasi awal saat boot agar localStorage tersinkron dengan IndexedDB Terenkripsi
+   * (Deprecated) Removed hydration to localStorage to prevent QuotaExceededError
    */
   async hydrateLocalStorage(): Promise<void> {
-    try {
-      const attendance = await this.getItem('attendance_logs', 'attendance');
-      if (attendance && Array.isArray(attendance)) {
-        const cleanAtt = attendance.filter((a: any) => a !== null && a !== undefined && typeof a === 'object');
-        localStorage.setItem('attendance', JSON.stringify(cleanAtt));
-      }
-    } catch (err) {
-      console.error('Error hydrating local storage from IDB:', err);
-    }
+    // No-op
   }
 }
 

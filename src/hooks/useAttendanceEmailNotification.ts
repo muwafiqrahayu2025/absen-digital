@@ -6,7 +6,7 @@ import { toast } from 'react-hot-toast';
 export function useAttendanceEmailNotification() {
   useEffect(() => {
     const checkAttendance = () => {
-      const school = db.getSchool();
+      const school = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
       const limitTime = school.operationalCheckInLimit || '08:00';
       const adminEmail = school.adminEmail;
 
@@ -67,7 +67,10 @@ export function useAttendanceEmailNotification() {
         });
         db.setAttendance(updatedAttendance);
 
-        const currentUser = JSON.parse(localStorage.getItem('auth_user') || '{}');
+        // [BUG-009 FIX] Kunci localStorage yang benar adalah 'active_session_user'
+        // bukan 'auth_user'. Sebelumnya toast admin tidak pernah tampil karena
+        // currentUser selalu {} (kunci tidak ditemukan).
+        const currentUser = JSON.parse(localStorage.getItem('active_session_user') || '{}');
         if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'kepala_sekolah')) {
           toast.error(`Sistem Otomatis: Email notifikasi absensi telah dikirim ke ${adminEmail}. (Terdapat ${missingTeachers.length} guru/dosen/staf Alpha).`, {
             duration: 8000,

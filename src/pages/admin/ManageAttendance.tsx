@@ -274,7 +274,7 @@ export function ManageAttendance() {
     const handleSendBroadcast = () => {
       if (!selectedMonth) return;
       
-      const currentSchool = db.getSchool();
+      const currentSchool = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
       const hasNotifApi = !!(currentSchool.gasWebAppUrl || currentSchool.whatsappApiKey);
       
       if (!hasNotifApi) {
@@ -327,7 +327,7 @@ export function ManageAttendance() {
             </button>
             <div className="flex-1"></div>
             <div className="flex flex-col sm:flex-row gap-2">
-              {(!db.getSchool().gasWebAppUrl && !db.getSchool().whatsappApiKey && !globalSettingsLoading && globalSettings.wa_fallback_enabled) ? (
+              {(!({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any).gasWebAppUrl && !({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any).whatsappApiKey && !globalSettingsLoading && globalSettings.wa_fallback_enabled) ? (
                 <button
                   onClick={handleSendBroadcast}
                   className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-emerald-600 border border-emerald-500 shadow-md hover:bg-emerald-700 transition-all duration-200"
@@ -441,7 +441,7 @@ export function ManageAttendance() {
             <div className="font-bold">Portal Induk</div>
             <div>: SISTEM PRESENSI & MANAJEMEN DIGITAL</div>
             <div className="font-bold">Lembaga / Instansi</div>
-            <div>: {db.getSchool().kopSurat?.nama_dinas || db.getSchool().nama_dinas || "Nama Yayasan/Dinas Belum Diatur"}</div>
+            <div>: {({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any).kopSurat?.nama_dinas || ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any).nama_dinas || "Nama Yayasan/Dinas Belum Diatur"}</div>
             <div className="font-bold">Periode Laporan</div>
             <div>: {selectedMonthLabel}</div>
           </div>
@@ -714,7 +714,7 @@ export function ManageAttendance() {
             </p>
           </div>
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#17a2b8]/10 text-slate-700 text-xs font-mono font-bold">
-            🎯 Radius Aman: {db.getSchool().radius || 120}m
+            🎯 Radius Aman: {({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any).radius || 120}m
           </span>
         </div>
 
@@ -785,7 +785,7 @@ export function ManageAttendance() {
                       <td className="p-3 text-center">
                         {record.distance !== undefined ? (
                           <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold ${record.distance <= (db.getSchool().radius || 120)
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold ${record.distance <= (({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any).radius || 120)
                                 ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                                 : "bg-rose-50 text-rose-800 border border-rose-200"
                               }`}

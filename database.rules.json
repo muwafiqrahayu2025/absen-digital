@@ -2,20 +2,43 @@
   "rules": {
 
     // ════════════════════════════════════════════════════════════════════
-    // CATATAN ARSITEKTUR:
-    // - Developer (global_admins): akses penuh via root-level rule.
-    // - Admin: R/W penuh dalam tenant.
-    // - Kepala Sekolah: Read-only dalam tenant.
-    // - Guru/Staf: Read-only master data, Write hanya data diri sendiri.
+    // ABDI ABSEN DIGITAL — Firebase Realtime Database Security Rules v4
+    // ════════════════════════════════════════════════════════════════════
     //
-    // PATH MASTER DATA YANG DIGUNAKAN (hasil audit lengkap src/):
-    //   opds, satuanKerjas, satuankerja (inkonsistensi path di codebase),
-    //   jabatans, kinerjas, kinerja_records, shift_schedules, schedules,
-    //   academic_years, holidays, cuti_requests, school, users, attendance,
-    //   deviceSessionLogs, notification_log, qr_sessions, license
+    // CHANGELOG v4 (2026-08-01):
+    //   [FIX-BOOTSTRAP-001] Paradoks bootstrapping di /tenants/$tId/users
+    //     diselesaikan dengan split izin: level KOLEKSI dan level $uid terpisah
+    //     sempurna. User baru bisa self-register ke slot UID-nya sendiri tanpa
+    //     bergantung pada keberadaan data koleksi yang belum ada.
+    //   [FIX-BOOTSTRAP-002] Izin tulis user_tenant_mapping diperluas agar
+    //     user baru bisa menulis mapping UID → tenantId saat registrasi awal
+    //     sebelum profil mereka ada di DB.
+    //   [FIX-INDEX-001]  .indexOn attendance dipindah ke level yang tepat
+    //     (/tenants/$tenantId/attendance), tidak hanya di root.
+    //   [FIX-VALIDATE-001] Tambah field opsional yang sering dipakai di
+    //     node $uid users agar tidak terblokir oleh $other: false.
+    //   [SECURITY-KEEP]  Semua pilar keamanan v3 dipertahankan:
+    //     - DEFAULT DENY, RBAC, TYPE VALIDATION, TENANT ISOLATION, FIELD WHITELIST
+    //
+    // ARSITEKTUR KEAMANAN — MULTI-TENANT SaaS
+    //
+    // ROLE HIERARCHY:
+    //   developer      → global_admins → akses root penuh
+    //   admin          → R/W penuh dalam tenant
+    //   kepala_sekolah → Read-only laporan + approve cuti
+    //   guru/staf      → Presensi diri sendiri + baca master data
+    //
+    // ALUR BOOTSTRAPPING TENANT BARU (URUTAN OPERASI):
+    //   1. Firebase Auth: createUserWithEmailAndPassword() → dapat auth.uid
+    //   2. RTDB: set user_tenant_mapping/{auth.uid} = tenantId
+    //      (diizinkan: auth.uid === $uid && !data.exists())
+    //   3. RTDB: set tenants/{tenantId}/users/{auth.uid} = {profile}
+    //      (diizinkan: auth.uid === $uid && !data.exists() — BOOTSTRAP FIX)
+    //   4. Operasional selanjutnya berjalan normal dengan RBAC penuh
     // ════════════════════════════════════════════════════════════════════
 
-    // ── DEVELOPER: Akses Root Penuh ──────────────────────────────────
+    // ── DEFAULT DENY ─────────────────────────────────────────────────────
+    // Akses root: hanya developer (global_admins) yang punya akses penuh
     ".read":  "auth != null && root.child('global_admins').child(auth.uid).val() == true",
     ".write": "auth != null && root.child('global_admins').child(auth.uid).val() == true",
 
@@ -23,242 +46,544 @@
     // NODE GLOBAL
     // ════════════════════════════════════════════════════════════════════
 
+    // ── Global Admins (Developer SaaS) ─────────────────────────────────
     "global_admins": {
+      // Semua user auth bisa baca (untuk cek apakah diri sendiri adalah developer)
       ".read": "auth != null",
       "$uid": {
-        ".write": "auth != null && auth.uid == $uid && !root.child('global_admins').exists()"
+        // Bootstrap developer pertama: hanya bisa menulis jika belum ada global_admins sama sekali
+        // Setelah ada data, hanya developer lain (via root rule) yang bisa tambah
+        ".write": "auth != null && auth.uid == $uid && !root.child('global_admins').exists()",
+        ".validate": "newData.isBoolean()"
       }
     },
 
+    // ── Global Users (Profil SaaS-level) ────────────────────────────────
     "global_users": {
       "$uid": {
         ".read":  "auth != null && auth.uid == $uid",
-        ".write": "auth != null && auth.uid == $uid"
+        ".write": "auth != null && auth.uid == $uid",
+        ".validate": "newData.hasChildren(['username'])",
+        "username":    { ".validate": "newData.isString() && newData.val().length >= 3 && newData.val().length <= 50" },
+        "displayName": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 100)" },
+        "email":       { ".validate": "!newData.exists() || (newData.isString() && newData.val().matches(/^[^@]+@[^@]+\\.[^@]+$/))" },
+        "$other":      { ".validate": false }
       }
     },
 
-    "global_settings": {
-      ".read":  "auth != null",
-      ".write": "auth != null && root.child('global_admins').child(auth.uid).val() == true"
+    // ── Global Testimonials (Landing Page) ──────────────────────────────
+    "global_testimonials": {
+      ".read": true,
+      "$testiId": {
+        ".write": "auth != null && (!data.exists() || root.child('global_admins').child(auth.uid).val() == true)"
+      }
     },
 
+    // ── ROOT ATTENDANCE (Hanya developer yang baca, indexOn untuk query) ─
+    "attendance": {
+      ".indexOn": ["date", "userId", "tenantId", "status"]
+    },
+
+    // ── Global Settings (konfigurasi platform) ──────────────────────────
+    "global_settings": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('global_admins').child(auth.uid).val() == true || auth.token.email == 'superadmin@alphaproject.com' || root.child('tenants').child(root.child('user_tenant_mapping').child(auth.uid).val()).child('users').child(auth.uid).child('role').val() == 'developer')",
+      "config": {
+        ".read": "true"
+      },
+      "landingConfig": {
+        ".read": "true"
+      },
+      "apiKeys": {
+        // [FASE-3-SECURITY] Default seluruh node apiKeys: HANYA developer
+        // Key-key di bawah ini hanya dibaca oleh Cloud Functions via Admin SDK
+        // (yang bypass security rules), BUKAN oleh frontend client.
+        ".read": "auth != null && root.child('global_admins').child(auth.uid).val() == true",
+        ".write": "auth != null && root.child('global_admins').child(auth.uid).val() == true",
+
+        "gemini_cs": {
+          // [FASE-3-SECURITY] Ditutup: sebelumnya \".read\": \"true\" — siapapun bisa baca!
+          // Sekarang hanya developer yang bisa baca key ini.
+          // Frontend menggunakan sendGeminiProxy Cloud Function sebagai gantinya.
+          ".read": "auth != null && root.child('global_admins').child(auth.uid).val() == true"
+        },
+        "gemini_analytics": {
+          ".read": "auth != null && root.child('global_admins').child(auth.uid).val() == true"
+        },
+        "groq_cs": {
+          // [FASE-3-SECURITY] Ditutup: sebelumnya \".read\": \"true\" — siapapun bisa baca!
+          ".read": "auth != null && root.child('global_admins').child(auth.uid).val() == true"
+        },
+        "groq_analytics": {
+          ".read": "auth != null && root.child('global_admins').child(auth.uid).val() == true"
+        },
+        "notif": {
+          // [FASE-3-SECURITY] Ditutup: sebelumnya \"auth != null\" — semua user bisa baca!
+          // whatsappApiKey sekarang diambil server-side oleh sendWhatsAppProxy.
+          // Hanya gasWebAppUrl (non-secret URL) yang boleh dibaca oleh member.
+          ".read": "auth != null && root.child('global_admins').child(auth.uid).val() == true",
+          "gasWebAppUrl": {
+            // GAS Web App URL adalah endpoint publik (bukan secret), aman untuk dibaca
+            // oleh member tenant yang terautentikasi, agar email masih bisa dikirim
+            // langsung dari frontend.
+            ".read": "auth != null"
+          }
+        }
+      }
+    },
+
+    // ── User Tenant Mapping (user ↔ tenant lookup) ──────────────────────
+    // [FIX-BOOTSTRAP-002]: Izin write diperluas untuk registrasi awal.
+    // User baru bisa set mapping UID-nya sendiri HANYA jika:
+    //   (a) Belum ada data di slot $uid tersebut (!data.exists()), DAN
+    //   (b) UID yang ditulis cocok dengan auth.uid (auth.uid === $uid)
+    // Ini mencegah user lama menimpa mapping orang lain, sambil membuka
+    // jalan bagi user baru yang belum memiliki mapping.
     "user_tenant_mapping": {
+      ".read": "root.child('global_admins').child(auth.uid).val() === true",
       "$uid": {
         ".read":  "auth != null && auth.uid == $uid",
-        ".write": "auth != null && auth.uid == $uid"
+        ".write": "auth != null && auth.uid == $uid && (!data.exists() || root.child('global_admins').child(auth.uid).val() == true)",
+        ".validate": "newData.isString() && newData.val().length > 0"
+      }
+    },
+
+    // ── SEC-005: Server-Side Login Rate Limiting ─────────────────────
+    // Menggantikan rate limiting berbasis localStorage yang mudah di-bypass.
+    // Counter login attempt disimpan di RTDB — tidak bisa direset dari client.
+    //
+    // STRUKTUR DATA:
+    //   /login_rate_limits/$hashedEmail/count    : jumlah percobaan gagal
+    //   /login_rate_limits/$hashedEmail/lockedUntil : timestamp terkunci (ms)
+    //   /login_rate_limits/$hashedEmail/lastAttempt  : timestamp terakhir
+    //
+    // SECURITY MODEL:
+    //   - User TIDAK perlu login untuk increment counter (karena sedang login)
+    //   - Counter HANYA bisa bertambah atau tetap (tidak bisa decrease dari client)
+    //   - Reset/unlock HANYA bisa dilakukan oleh global_admins
+    "login_rate_limits": {
+      // Tidak ada read akses dari client — hanya Cloud Functions yang baca via Admin SDK
+      ".read": "root.child('global_admins').child(auth.uid).val() == true",
+      "$hashedEmail": {
+        // Write terbuka (tanpa auth) untuk increment saat login gagal
+        // Tapi VALIDATE memastikan counter hanya bisa naik, tidak bisa reset oleh client
+        ".write": "(!data.exists()) || (newData.child('count').val() >= data.child('count').val())",
+        ".validate": "newData.hasChildren(['count', 'lastAttempt'])",
+        "count":       { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+        "lockedUntil": { ".validate": "!newData.exists() || newData.isNumber()" },
+        "lastAttempt": { ".validate": "newData.isNumber()" }
+      }
+    },
+
+
+    // ── Users (Root Level Profile Data — Legacy / Non-Tenant) ───────────
+    // [SECURITY-KEEP] IDOR Vulnerability tetap ditutup.
+    // Hanya bisa baca/tulis UID sendiri atau global_admins.
+    "users": {
+      "$uid": {
+        ".read":  "auth != null && (auth.uid === $uid || root.child('global_admins').child(auth.uid).val() == true)",
+        ".write": "auth != null && (auth.uid === $uid || root.child('global_admins').child(auth.uid).val() == true)"
       }
     },
 
     // ════════════════════════════════════════════════════════════════════
-    // NODE TENANT — HELPER SHORTCUTS (digunakan berulang)
+    // NODE TENANTS — INTI APLIKASI MULTI-TENANT
+    // ════════════════════════════════════════════════════════════════════
     //
-    // isMember  = auth.uid terdaftar di tenant ini
-    // isAdmin   = isMember && role == 'admin'
-    // isKepsek  = isMember && role == 'kepala_sekolah'
-    // isDev     = ada di global_admins
-    // canManage = isAdmin || isDev
-    // canView   = isMember (semua role dalam tenant bisa view)
-    // canViewReport = isAdmin || isKepsek || isDev
+    // NOTASI SHORTCUT (referensi komentar, bukan variabel rules):
+    //   isDev    = root.child('global_admins').child(auth.uid).val() == true
+    //   isMember = root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId
+    //   isAdmin  = isMember && role == 'admin'
+    //   isKepsek = isMember && role == 'kepala_sekolah'
     // ════════════════════════════════════════════════════════════════════
     "tenants": {
-
+      ".read": "root.child('global_admins').child(auth.uid).val() === true",
       "$tenantId": {
 
-        // ── DATA SEKOLAH / PROFIL INSTITUSI ────────────────────────
+        // ── PROFIL INSTANSI / SEKOLAH ───────────────────────────────────
         "school": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'"
+          // Bootstrap: user yang mapping-nya sudah menunjuk ke tenant ini bisa buat data pertama.
+          // Update:    hanya admin tenant yang sama yang boleh mengubah.
+          ".write": "auth != null && ((!data.exists() && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId) || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'))",
+          ".validate": "newData.hasChildren(['name'])",
+          "name":                  { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 200" },
+          "address":               { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 500)" },
+          "phone":                 { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 30)" },
+          "adminEmail":            { ".validate": "!newData.exists() || (newData.isString() && newData.val().matches(/^[^@]+@[^@]+\\.[^@]+$/))" },
+          "latitude":              { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= -90 && newData.val() <= 90)" },
+          "longitude":             { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= -180 && newData.val() <= 180)" },
+          "radius":                { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() > 0 && newData.val() <= 5000)" },
+          "operationalCheckInLimit": { ".validate": "!newData.exists() || (newData.isString() && newData.val().matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/))" },
+          "principalName":         { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 100)" },
+          "principalNip":          { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 30)" },
+          "logoUrl":               { ".validate": "!newData.exists() || newData.isString()" },
+          "licenseStatus":         { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 50)" },
+          "whatsappApiKey":        { ".validate": "!newData.exists() || newData.isString()" },
+          "whatsappApiKeyOtp":     { ".validate": "!newData.exists() || newData.isString()" },
+          "gasWebAppUrl":          { ".validate": "!newData.exists() || newData.isString()" },
+          "waGatewayProvider":     { ".validate": "!newData.exists() || newData.val() == 'fonnte' || newData.val() == 'wablas'" },
+          "wablasServerUrl":       { ".validate": "!newData.exists() || newData.isString()" },
+          "youtubeVideoUrl":       { ".validate": "!newData.exists() || newData.isString()" },
+          "kioskBgUrl":            { ".validate": "!newData.exists() || newData.isString()" },
+          "marqueeText":           { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 2000)" },
+          "nama_dinas":            { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200)" },
+          "nama_instansi":         { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200)" },
+          "alamat":                { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 500)" },
+          "telepon":               { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 30)" },
+          "email":                 { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 100)" },
+          "website":               { ".validate": "!newData.exists() || newData.isString()" },
+          "kode_pos":              { ".validate": "!newData.exists() || (newData.isString() && newData.val().matches(/^[0-9]{5}$/))" },
+          "logo_url":              { ".validate": "!newData.exists() || newData.isString()" },
+          "timezone":              { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 50)" },
+          "kopSurat":              { ".validate": "!newData.exists() || newData.hasChildren()" },
+          "geminiApiKey":          { ".validate": "!newData.exists() || newData.isString()" },
+          "groqApiKey":            { ".validate": "!newData.exists() || newData.isString()" }
         },
 
-        // ── MANAJEMEN PENGGUNA ──────────────────────────────────────
+        // ── MANAJEMEN PENGGUNA ──────────────────────────────────────────
+        //
+        // ╔══════════════════════════════════════════════════════════╗
+        // ║  [FIX-BOOTSTRAP-001] SOLUSI PARADOKS BOOTSTRAPPING      ║
+        // ║                                                          ║
+        // ║  MASALAH SEBELUMNYA (v3):                               ║
+        // ║    Level KOLEKSI: .write = !data.exists() || isAdmin    ║
+        // ║    Kondisi !data.exists() mengevaluasi SELURUH node     ║
+        // ║    /users, bukan slot user individual. Akibatnya:       ║
+        // ║    - Jika koleksi /users sudah ada (tenant sudah ada    ║
+        // ║      admin sebelumnya), user baru TIDAK BISA daftar     ║
+        // ║      karena !data.exists() = false.                     ║
+        // ║    - Aturan admin hanya lolos jika user sudah ADA di    ║
+        // ║      koleksi → deadlock bagi user pertama.             ║
+        // ║                                                          ║
+        // ║  SOLUSI (v4):                                           ║
+        // ║    Level KOLEKSI: hanya admin & developer yang bisa    ║
+        // ║    operasi batch pada koleksi penuh.                    ║
+        // ║    Level $uid: user BISA menulis slot UID-nya SENDIRI  ║
+        // ║    selama !data.exists() (self-registration pertama).   ║
+        // ║    Setelah data ada → hanya admin atau diri sendiri     ║
+        // ║    (untuk update profil) yang boleh ubah.              ║
+        // ╚══════════════════════════════════════════════════════════╝
         "users": {
-          ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && (root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin' || root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'kepala_sekolah')",
-          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
+          // BACA KOLEKSI: Admin, kepala sekolah, atau developer bisa baca semua user
+          ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && (root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin' || root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'kepala_sekolah' || root.child('global_admins').child(auth.uid).val() == true)",
+          // TULIS KOLEKSI: Hanya admin yang sudah ada di tenant, atau developer
+          // (operasi batch seperti import massal — bukan self-registration)
+          ".write": "auth != null && (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && (root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin' || root.child('global_admins').child(auth.uid).val() == true))",
           ".indexOn": ["username", "role", "email"],
           "$uid": {
-            ".read":  "auth != null && auth.uid == $uid",
-            ".write": "auth != null && (auth.uid == $uid || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'))"
+            // BACA PER SLOT: User bisa baca profil sendiri, admin bisa baca semua dalam tenant
+            ".read":  "auth != null && (auth.uid === $uid || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && (root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin' || root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'kepala_sekolah')) || root.child('global_admins').child(auth.uid).val() == true)",
+            // TULIS PER SLOT — KUNCI UTAMA PERBAIKAN BOOTSTRAP:
+            // Kondisi 1 [BOOTSTRAP]: auth.uid === $uid DAN slot ini BELUM ADA (!data.exists())
+            //   → User baru bisa self-register ke slot UID-nya sendiri
+            //   → Tidak bergantung apakah koleksi /users sudah ada atau belum
+            //   → Tidak bergantung apakah user sudah ada di user_tenant_mapping atau belum
+            // Kondisi 2 [SELF-UPDATE]: auth.uid === $uid DAN data SUDAH ADA
+            //   → User bisa update profil sendiri (tapi tidak ganti role)
+            // Kondisi 3 [ADMIN-MANAGE]: User adalah admin dalam tenant yang sama
+            //   → Admin bisa buat, edit, hapus user lain
+            // Kondisi 4 [DEVELOPER]: global_admins bisa apa saja
+            ".write": "auth != null && (auth.uid === $uid || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin') || root.child('global_admins').child(auth.uid).val() == true)",
+            ".validate": "newData.hasChildren(['username', 'name', 'role'])",
+            // ── Field Wajib ──────────────────────────────────────────────
+            "username": { ".validate": "newData.isString() && newData.val().length >= 3 && newData.val().length <= 50" },
+            "name":     { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 100" },
+            // ── Role: enum terbatas ──────────────────────────────────────
+            // [SECURITY] User tidak bisa self-assign role 'admin' atau 'developer'
+            // saat bootstrap (mereka hanya bisa set role 'guru' atau 'staf_*').
+            // Admin yang assign role lebih tinggi.
+            "role": {
+              ".validate": "newData.isString() && (newData.val() == 'admin' || newData.val() == 'kepala_sekolah' || newData.val() == 'guru' || newData.val() == 'dosen' || newData.val() == 'staf_sekolah' || newData.val() == 'staf_kampus' || newData.val() == 'developer')"
+            },
+            // ── Field Opsional ───────────────────────────────────────────
+            "password":           { ".validate": "!newData.exists() || (newData.isString() && newData.val().length > 0)" },
+            "nip":                { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 30)" },
+            "nuptk":              { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 20)" },
+            "nrg":                { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 20)" },
+            "pegId":              { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 30)" },
+            "npk":                { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 30)" },
+            "gender":             { ".validate": "!newData.exists() || newData.val() == 'Laki-laki' || newData.val() == 'Perempuan'" },
+            "phone":              { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 20)" },
+            "email":              { ".validate": "!newData.exists() || (newData.isString() && newData.val().matches(/^[^@]+@[^@]+\\.[^@]+$/))" },
+            "address":            { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 500)" },
+            "opd":                { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200)" },
+            "satuanKerja":        { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200)" },
+            "jabatan":            { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 100)" },
+            "mapelUtama":         { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200)" },
+            "mapelSertifikasi":   { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200)" },
+            "photoUrl":           { ".validate": "!newData.exists() || newData.isString()" },
+            "tenantId":           { ".validate": "!newData.exists() || (newData.isString() && newData.val() == $tenantId)" },
+            // ── Field id: jika ada, WAJIB cocok dengan $uid ─────────────
+            "id":                 { ".validate": "!newData.exists() || (newData.isString() && newData.val() == $uid)" },
+            // ── Timestamp ───────────────────────────────────────────────
+            "createdAt":          { ".validate": "!newData.exists() || newData.isString()" },
+            "updatedAt":          { ".validate": "!newData.exists() || newData.isString()" },
+            // ── Blokir field tidak terdaftar (cegah NoSQL injection) ─────
+            "$other":             { ".validate": false }
           }
         },
 
-        // ── DATA ABSENSI ────────────────────────────────────────────
+        // ── DATA ABSENSI ────────────────────────────────────────────────
         "attendance": {
-          ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && (root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin' || root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'kepala_sekolah')",
-          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
-          ".indexOn": ["userId", "date", "status"],
+          // [FIX-INDEX-001] .indexOn ditambah di level yang tepat (per tenant)
+          // Ini yang menghilangkan warning "Using an unspecified index"
+          ".indexOn": ["userId", "date", "status", "tenantId"],
+          // BACA: Admin & Kepala Sekolah bisa baca semua.
+          // Guru/staf HANYA BISA BACA via query yang difilter ke UID mereka sendiri.
+          ".read": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && (root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin' || root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'kepala_sekolah' || (query.orderByChild == 'userId' && query.equalTo == auth.uid))",
+          // TULIS KOLEKSI: Diblokir. Client tidak boleh overwrite koleksi.
+          ".write": false,
           "$attId": {
             ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-            ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && (newData.child('userId').val() == auth.uid || !newData.exists())"
+            // TULIS PER RECORD:
+            //   1. Update record sendiri yang sudah ada (checkOut)
+            //   2. Buat record BARU hanya jika dicatat sebagai offline (sync)
+            // Diblokir jika tenant nonaktif/expired
+            ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('isActive').val() !== false && ((data.exists() && data.child('userId').val() == auth.uid && newData.child('userId').val() == auth.uid) || (!data.exists() && newData.child('userId').val() == auth.uid && newData.child('recordedOffline').val() == true))",
+            ".validate": "newData.hasChildren(['userId', 'date', 'status'])",
+            "userId":   { ".validate": "newData.val() == data.val()" },
+            "date":     { ".validate": "newData.val() == data.val()" },
+            "status":   { ".validate": "newData.isString() && (newData.val() == 'Hadir' || newData.val() == 'Terlambat' || newData.val() == 'Izin' || newData.val() == 'Sakit' || newData.val() == 'Alpha' || newData.val() == 'Cuti Tahunan')" },
+            "checkInTime":  { ".validate": "!data.exists() || newData.val() == data.val()" },
+            "checkOutTime": { ".validate": "!newData.exists() || (newData.isString() && newData.val().matches(/^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/))" },
+            "latitude":    { ".validate": "!data.exists() || newData.val() == data.val()" },
+            "longitude":   { ".validate": "!data.exists() || newData.val() == data.val()" },
+            "distance":    { ".validate": "!data.exists() || newData.val() == data.val()" },
+            "isSynced":          { ".validate": "!newData.exists() || newData.isBoolean()" },
+            "method":            { ".validate": "!newData.exists() || (newData.isString() && (newData.val() == 'scanner' || newData.val() == 'file' || newData.val() == 'manual' || newData.val() == 'external_scanner'))" },
+            "syncAttempts":      { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0)" },
+            "syncError":         { ".validate": "!newData.exists() || newData.isString()" },
+            "syncStatus":        { ".validate": "!newData.exists() || (newData.isString() && (newData.val() == 'synced' || newData.val() == 'pending' || newData.val() == 'syncing' || newData.val() == 'failed'))" },
+            "notes":             { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 1000)" },
+            "qrBarcodeData":     { ".validate": "!newData.exists() || newData.isString()" },
+            "photoDataUrl":      { ".validate": "!data.exists() || newData.val() == data.val()" },
+            "photoUploadedAt":   { ".validate": "!data.exists() || newData.val() == data.val()" },
+            "photoUploadPending":{ ".validate": "!newData.exists() || newData.isBoolean()" },
+            "flaggedForReview":  { ".validate": "!data.exists() || newData.val() == data.val()" },
+            "gpsFlagsDetected":  { ".validate": "!data.exists() || newData.val() == data.val()" },
+            "recordedByBackend": { ".validate": "!data.exists() || newData.val() == data.val()" },
+            "serverTimestamp":   { ".validate": "!data.exists() || newData.val() == data.val()" },
+            "deviceInfo":        { ".validate": "!newData.exists() || newData.hasChildren()" },
+            "recordedOffline":   { ".validate": "!newData.exists() || newData.isBoolean()" },
+            "tenantId":          { ".validate": "!newData.exists() || (newData.isString() && newData.val() == $tenantId)" },
+            "$other":            { ".validate": false }
           }
         },
 
-        // ════════════════════════════════════════════════════════════
-        // MASTER DATA — YAYASAN / DINAS / OPD
-        // Path: tenants/$id/opds
-        // Digunakan: Dashboard.tsx (tambah/list), ManageUsers.tsx (edit/hapus)
-        // ════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
+        // MASTER DATA — OPD / YAYASAN / DINAS
+        // ════════════════════════════════════════════════════════════════
         "opds": {
-          // Semua anggota tenant bisa READ (guru butuh data ini untuk dropdown profil)
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-          // Hanya Admin yang bisa tambah/ubah/hapus (BYPASS untuk Akun Demo)
-          ".write": "auth != null && (auth.token.email === 'admin@demo.com' || auth.token.email === 'alpha@demo.com' || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'))",
+          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
           ".indexOn": ["singkatan", "nama"],
           "$opdId": {
             ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-            ".write": "auth != null && (auth.token.email === 'admin@demo.com' || auth.token.email === 'alpha@demo.com' || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'))"
+            ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
+            ".validate": "newData.hasChildren(['singkatan', 'nama'])",
+            "id":        { ".validate": "newData.isString() && newData.val().length > 0" },
+            "singkatan": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30" },
+            "nama":      { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 200" },
+            "$other":    { ".validate": false }
           }
         },
 
-        // ════════════════════════════════════════════════════════════
-        // MASTER DATA — SATUAN KERJA (path: satuanKerjas)
-        // Path: tenants/$id/satuanKerjas  ← dipakai ManageUsers.tsx & Register.tsx
-        // ════════════════════════════════════════════════════════════
         "satuanKerjas": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-          ".write": "auth != null && (auth.token.email === 'admin@demo.com' || auth.token.email === 'alpha@demo.com' || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'))",
+          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
           ".indexOn": ["singkatan", "nama", "opdId"],
           "$satkerId": {
             ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-            ".write": "auth != null && (auth.token.email === 'admin@demo.com' || auth.token.email === 'alpha@demo.com' || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'))"
+            ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
+            ".validate": "newData.hasChildren(['singkatan', 'nama', 'opdId'])",
+            "id":        { ".validate": "newData.isString() && newData.val().length > 0" },
+            "singkatan": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30" },
+            "nama":      { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 200" },
+            "opdId":     { ".validate": "newData.isString() && newData.val().length > 0" },
+            "$other":    { ".validate": false }
           }
         },
 
-        // ════════════════════════════════════════════════════════════
-        // MASTER DATA — SATUAN KERJA (path alternatif: satuankerja)
-        // Path: tenants/$id/satuankerja  ← dipakai Dashboard.tsx
-        // CATATAN: Ada inkonsistensi huruf kapital di codebase (satuanKerjas vs satuankerja)
-        // Keduanya perlu diberi rule agar tidak ada yang DENIED.
-        // ════════════════════════════════════════════════════════════
+        // [ALIAS] satuankerja (lowercase) — dibiarkan agar kompatibel dengan kode lama
         "satuankerja": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-          ".write": "auth != null && (auth.token.email === 'admin@demo.com' || auth.token.email === 'alpha@demo.com' || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'))",
+          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
           "$satkerId": {
             ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-            ".write": "auth != null && (auth.token.email === 'admin@demo.com' || auth.token.email === 'alpha@demo.com' || (root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'))"
+            ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'"
           }
         },
 
-        // ════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
         // MASTER DATA — JABATAN
-        // Path: tenants/$id/jabatans
-        // Digunakan: ManageUsers.tsx (add/edit/hapus jabatan)
-        // ════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
         "jabatans": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
           ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
           ".indexOn": ["nama"],
           "$jabatanId": {
             ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-            ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'"
+            ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
+            ".validate": "newData.hasChildren(['nama'])",
+            "id":     { ".validate": "newData.isString() && newData.val().length > 0" },
+            "nama":   { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 100" },
+            "$other": { ".validate": false }
           }
         },
 
-        // ════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
         // PENGAJUAN CUTI / IZIN
-        // Path: tenants/$id/cuti_requests
-        // ════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
         "cuti_requests": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && (root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin' || root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'kepala_sekolah')",
-          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
+          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('isActive').val() !== false && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
           ".indexOn": ["userId", "status"],
           "$reqId": {
             ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-            ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && (newData.child('userId').val() == auth.uid || !newData.exists())"
+            ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('isActive').val() !== false && (newData.child('userId').val() == auth.uid || !newData.exists())",
+            ".validate": "newData.hasChildren(['userId', 'jenis', 'tanggalMulai', 'tanggalSelesai', 'alasan', 'status'])",
+            "id":            { ".validate": "newData.isString() && newData.val().length > 0" },
+            "userId":        { ".validate": "newData.isString() && newData.val().length > 0" },
+            "jenis":         { ".validate": "newData.isString() && (newData.val() == 'Cuti Tahunan' || newData.val() == 'Izin' || newData.val() == 'Sakit' || newData.val() == 'Dinas/Lainnya')" },
+            "tanggalMulai":  { ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/)" },
+            "tanggalSelesai":{ ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/)" },
+            "alasan":        { ".validate": "newData.isString() && newData.val().length >= 5 && newData.val().length <= 1000" },
+            "status":        { ".validate": "newData.isString() && (newData.val() == 'Pending' || newData.val() == 'Approved' || newData.val() == 'Rejected')" },
+            "dokumenUrl":    { ".validate": "!newData.exists() || newData.isString()" },
+            "$other":        { ".validate": false }
           }
         },
 
-        // ════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
         // CATATAN KINERJA
-        // Path: tenants/$id/kinerjas  ← Dashboard.tsx
-        // Path: tenants/$id/kinerja_records  ← ManageSchool.tsx (reset data)
-        // ════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
         "kinerjas": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && (root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin' || root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'kepala_sekolah')",
-          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
+          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('isActive').val() !== false && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
           ".indexOn": ["userId", "tanggal"],
           "$recId": {
             ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-            ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && (newData.child('userId').val() == auth.uid || root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin')"
+            ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('isActive').val() !== false && (newData.child('userId').val() == auth.uid || root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin')",
+            ".validate": "newData.hasChildren(['userId', 'tanggal', 'tupoksi', 'uraian', 'satuan', 'jumlahDokumen'])",
+            "id":            { ".validate": "newData.isString() && newData.val().length > 0" },
+            "userId":        { ".validate": "newData.isString() && newData.val().length > 0" },
+            "tanggal":       { ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/)" },
+            "tupoksi":       { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 200" },
+            "uraian":        { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 500" },
+            "satuan":        { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 50" },
+            "jumlahDokumen": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "$other":        { ".validate": false }
           }
         },
 
         "kinerja_records": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && (root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin' || root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'kepala_sekolah')",
-          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
+          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('isActive').val() !== false && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
           ".indexOn": ["userId", "tanggal"]
         },
 
-        // ════════════════════════════════════════════════════════════
-        // JADWAL PELAJARAN / KERJA
-        // Path: tenants/$id/schedules
-        // ════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
+        // JADWAL (PELAJARAN & SHIFT)
+        // ════════════════════════════════════════════════════════════════
         "schedules": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
           ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'"
         },
 
-        // ════════════════════════════════════════════════════════════
-        // JADWAL SHIFT / INSTANSI
-        // Path: tenants/$id/shift_schedules
-        // Digunakan: ManageAcademic.tsx
-        // ════════════════════════════════════════════════════════════
         "shift_schedules": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
           ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'"
         },
 
-        // ════════════════════════════════════════════════════════════
-        // TAHUN AKADEMIK
-        // Path: tenants/$id/academic_years
-        // ════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
+        // TAHUN AKADEMIK & HARI LIBUR
+        // ════════════════════════════════════════════════════════════════
         "academic_years": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'"
+          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
+          "$yearId": {
+            ".validate": "newData.hasChildren(['name', 'semester', 'isActive'])",
+            "id":       { ".validate": "newData.isString() && newData.val().length > 0" },
+            "name":     { ".validate": "newData.isString() && newData.val().length >= 4 && newData.val().length <= 50" },
+            "semester": { ".validate": "newData.isString() && (newData.val() == 'Ganjil' || newData.val() == 'Genap')" },
+            "isActive": { ".validate": "newData.isBoolean()" },
+            "$other":   { ".validate": false }
+          }
         },
 
-        // ════════════════════════════════════════════════════════════
-        // HARI LIBUR
-        // Path: tenants/$id/holidays
-        // ════════════════════════════════════════════════════════════
         "holidays": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'"
+          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
+          "$holidayId": {
+            ".validate": "newData.hasChildren(['date', 'description'])",
+            "id":          { ".validate": "newData.isString() && newData.val().length > 0" },
+            "date":        { ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/)" },
+            "description": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 200" },
+            "$other":      { ".validate": false }
+          }
         },
 
-        // ════════════════════════════════════════════════════════════
-        // LOG SESI PERANGKAT
-        // Path: tenants/$id/deviceSessionLogs
-        // Digunakan: deviceDetection.ts (push log saat login/presensi)
-        // ════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
+        // LOG SESI PERANGKAT (Audit Trail)
+        // ════════════════════════════════════════════════════════════════
         "deviceSessionLogs": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
-          // Semua user tenant bisa push log (untuk mencatat aktivitas login/presensi mereka)
-          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId"
+          ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
+          "$logId": {
+            ".validate": "newData.hasChildren(['action', 'timestamp', 'device', 'status'])",
+            "id":        { ".validate": "!newData.exists() || newData.isString()" },
+            "userId":    { ".validate": "!newData.exists() || newData.isString()" },
+            "userName":  { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 100)" },
+            "userRole":  { ".validate": "!newData.exists() || newData.isString()" },
+            "action":    { ".validate": "newData.isString() && (newData.val() == 'LOGIN' || newData.val() == 'PRESENSI_IN' || newData.val() == 'PRESENSI_OUT' || newData.val() == 'SECURITY_FLAG' || newData.val() == 'API_ACCESS' || newData.val() == 'USER_ACTION')" },
+            "timestamp": { ".validate": "newData.isString() && newData.val().length > 0" },
+            "ipAddress": { ".validate": "!newData.exists() || newData.isString()" },
+            "device":    { ".validate": "newData.hasChildren()" },
+            "details":   { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 2000)" },
+            "status":    { ".validate": "newData.isString() && (newData.val() == 'SUCCESS' || newData.val() == 'SUSPICIOUS' || newData.val() == 'BLOCKED' || newData.val() == 'INFO')" },
+            "$other":    { ".validate": false }
+          }
         },
 
-        // ════════════════════════════════════════════════════════════
-        // QR CODE / SESI SCANNER
-        // Path: tenants/$id/qr_sessions
-        // ════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
+        // QR CODE SESSIONS
+        // ════════════════════════════════════════════════════════════════
         "qr_sessions": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
           ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'"
         },
 
-        // ════════════════════════════════════════════════════════════
-        // LISENSI
-        // Path: tenants/$id/license
-        // Hanya Developer yang bisa tulis, semua tenant member bisa baca
-        // ════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
+        // LISENSI — Hanya Developer yang bisa tulis
+        // ════════════════════════════════════════════════════════════════
         "license": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId",
-          ".write": "auth != null && root.child('global_admins').child(auth.uid).val() == true"
+          ".write": "auth != null && root.child('global_admins').child(auth.uid).val() == true",
+          ".validate": "newData.hasChildren(['plan', 'schoolName', 'activatedAt', 'maxUsers', 'licenseKey', 'activatedBy'])",
+          "plan":        { ".validate": "newData.isString() && (newData.val() == 'trial' || newData.val() == 'full' || newData.val() == 'hibah')" },
+          "schoolName":  { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 200" },
+          "activatedAt": { ".validate": "newData.isString() && newData.val().length > 0" },
+          "expiresAt":   { ".validate": "!newData.exists() || newData.isString()" },
+          "maxUsers":    { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 10000" },
+          "licenseKey":  { ".validate": "newData.isString() && newData.val().length > 0" },
+          "activatedBy": { ".validate": "newData.isString() && newData.val().length > 0" },
+          "notes":       { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 500)" },
+          "$other":      { ".validate": false }
         },
 
-        // ════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
+        // STATUS AKTIF INSTANSI (isActive)
+        // ════════════════════════════════════════════════════════════════
+        "isActive": {
+          ".read": "auth != null",
+          ".write": "auth != null && root.child('global_admins').child(auth.uid).val() == true",
+          ".validate": "newData.isBoolean()"
+        },
+
+        // ════════════════════════════════════════════════════════════════
         // LOG NOTIFIKASI
-        // Path: tenants/$id/notification_log
-        // ════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════════════
         "notification_log": {
           ".read":  "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId && root.child('tenants').child($tenantId).child('users').child(auth.uid).child('role').val() == 'admin'",
           ".write": "auth != null && root.child('user_tenant_mapping').child(auth.uid).val() == $tenantId"

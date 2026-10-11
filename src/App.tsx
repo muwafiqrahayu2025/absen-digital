@@ -6,52 +6,102 @@ import { AuthProvider, useAuth } from "./components/AuthContext";
 import { ThemeProvider } from "./components/ThemeContext";
 import { EditModeProvider } from "./components/EditModeContext";
 import { Layout } from "./components/Layout";
+import { Suspense } from "react";
+import { PageLoader } from "./components/PageLoader";
 import { Login } from "./pages/Login";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import { Register } from "./pages/Register";
-import { Dashboard } from "./pages/Dashboard";
-import { Profile } from "./pages/Profile";
-import { ManageUsers } from "./pages/admin/ManageUsers";
-import { ManageSchool } from "./pages/admin/ManageSchool";
-import { ManageAcademic } from "./pages/admin/ManageAcademic";
-import { ManageHolidays } from "./pages/admin/ManageHolidays";
-import { ManageAttendance } from "./pages/admin/ManageAttendance";
-import { ManageLeave } from "./pages/admin/ManageLeave";
-import { ManageSchedule } from "./pages/admin/ManageSchedule";
-import { GenerateQR } from "./pages/admin/GenerateQR";
-import { ScanQR } from "./pages/teacher/ScanQR";
-import { PrincipalAttendanceRecaps } from "./pages/principal/PrincipalAttendanceRecaps";
-import { PrintRecap } from "./pages/principal/PrintRecap";
-import { SchoolScanner } from "./pages/admin/SchoolScanner";
-import { DeveloperConsole } from "./pages/admin/DeveloperConsole";
-import { ManageTenants } from "./pages/admin/ManageTenants";
-import { FloatingEditTools } from "./components/FloatingEditTools";
 import { LandingPage } from "./pages/LandingPage";
+
+// ── LAZY LOADED COMPONENTS (Code Splitting) ────────────────
+const Dashboard = React.lazy(() => import("./pages/Dashboard").then(m => ({ default: m.Dashboard })));
+const Profile = React.lazy(() => import("./pages/Profile").then(m => ({ default: m.Profile })));
+const SecuritySettings = React.lazy(() => import("./pages/account/SecuritySettings").then(m => ({ default: m.SecuritySettings })));
+const ManageUsers = React.lazy(() => import("./pages/admin/ManageUsers").then(m => ({ default: m.ManageUsers })));
+const ManageSchool = React.lazy(() => import("./pages/admin/ManageSchool").then(m => ({ default: m.ManageSchool })));
+const ManageAcademic = React.lazy(() => import("./pages/admin/ManageAcademic").then(m => ({ default: m.ManageAcademic })));
+const ManageHolidays = React.lazy(() => import("./pages/admin/ManageHolidays").then(m => ({ default: m.ManageHolidays })));
+const ManageAttendance = React.lazy(() => import("./pages/admin/ManageAttendance").then(m => ({ default: m.ManageAttendance })));
+const ManageLeave = React.lazy(() => import("./pages/admin/ManageLeave").then(m => ({ default: m.ManageLeave })));
+const ManageSchedule = React.lazy(() => import("./pages/admin/ManageSchedule").then(m => ({ default: m.ManageSchedule })));
+const GenerateQR = React.lazy(() => import("./pages/admin/GenerateQR").then(m => ({ default: m.GenerateQR })));
+const ScanQR = React.lazy(() => import("./pages/teacher/ScanQR").then(m => ({ default: m.ScanQR })));
+const PrincipalAttendanceRecaps = React.lazy(() => import("./pages/principal/PrincipalAttendanceRecaps").then(m => ({ default: m.PrincipalAttendanceRecaps })));
+const PrintRecap = React.lazy(() => import("./pages/principal/PrintRecap").then(m => ({ default: m.PrintRecap })));
+const SchoolScanner = React.lazy(() => import("./pages/admin/SchoolScanner").then(m => ({ default: m.SchoolScanner })));
+const ManageTenants = React.lazy(() => import("./pages/admin/ManageTenants").then(m => ({ default: m.ManageTenants })));
+const SystemConfiguration = React.lazy(() => import("./pages/admin/SystemConfiguration").then(m => ({ default: m.SystemConfiguration })));
+const LocalValidationCenter = React.lazy(() => import("./pages/admin/LocalValidationCenter").then(m => ({ default: m.LocalValidationCenter })));
+const ManageLicenses = React.lazy(() => import("./pages/admin/ManageLicenses").then(m => ({ default: m.ManageLicenses })));
+const AuditLogs = React.lazy(() => import("./pages/admin/AuditLogs").then(m => ({ default: m.AuditLogs })));
+const KioskSettings = React.lazy(() => import("./pages/admin/KioskSettings").then(m => ({ default: m.KioskSettings })));
+const DangerZone = React.lazy(() => import("./pages/admin/DangerZone").then(m => ({ default: m.DangerZone })));
+const AiAnalytics = React.lazy(() => import("./pages/admin/AiAnalytics").then(m => ({ default: m.AiAnalytics })));
+const LiveQRView = React.lazy(() => import("./pages/LiveQRView").then(m => ({ default: m.LiveQRView })));
+const LandingPageSettings = React.lazy(() => import("./pages/admin/LandingPageSettings").then(m => ({ default: m.LandingPageSettings })));
+import { FloatingEditTools } from "./components/FloatingEditTools";
 import { DeviceRegistrationModal } from "./components/DeviceRegistrationModal";
-import { LocalValidationCenter } from "./pages/admin/LocalValidationCenter";
-import { ManageLicenses } from "./pages/admin/ManageLicenses";
-import { AiAnalytics } from "./pages/admin/AiAnalytics";
-import { LiveQRView } from "./pages/LiveQRView";
 import { initNotificationQueueProcessor } from "./lib/notificationQueue";
 import { initializeFirebaseSync } from "./lib/firebaseSync";
+import type { Role } from "./types";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
-
-// Inisialisasi Notification Queue Processor (background job sekali saat app dimuat)
+// ── Inisialisasi background job ──────────────────────────────
 initNotificationQueueProcessor();
 
+// ── Semua role attendance (scan QR mandiri) ──────────────────
+const ATTENDANCE_CAPABLE_ROLES: Role[] = [
+  'guru', 'dosen', 'staf_sekolah', 'staf_kampus', 'kepala_sekolah', 'admin', 'developer'
+];
+
+// ── Role yang bisa akses manajemen absensi ───────────────────
+const ATTENDANCE_MANAGEMENT_ROLES: Role[] = ['admin', 'kepala_sekolah', 'developer'];
+
+// ── Role eksklusif admin dan developer ──────────────────────
+const ADMIN_ONLY_ROLES: Role[] = ['admin', 'developer'];
+
+// ─────────────────────────────────────────────────────────────
+// TOP-LEVEL ROUTE BRANCHING
+// Percabangan tingkat tertinggi: menggunakan ProtectedRoute dan ErrorBoundary.
+// ─────────────────────────────────────────────────────────────
+import { ErrorBoundary } from "./components/ErrorBoundary";
+
+function AppRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: Role[]; }) {
+  return (
+    <ProtectedRoute allowedRoles={allowedRoles}>
+      <ErrorBoundary>{children}</ErrorBoundary>
+    </ProtectedRoute>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// ROOT ROUTE HANDLER
+// Menentukan apakah user melihat LandingPage, Login, atau App Layout
+// ─────────────────────────────────────────────────────────────
 function RootRouteHandler() {
-  const { user, loading } = useAuth();
+  const { user, isAuthLoading } = useAuth();
   const location = useLocation();
-  if (loading) return null;
+
+  if (isAuthLoading) return null;
+
   if (!user) {
     if (location.pathname === "/" || location.pathname === "") {
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true || window.location.protocol === 'file:' || Boolean((window as any).__TAURI__) || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const isStandalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as any).standalone === true ||
+        window.location.protocol === 'file:' ||
+        Boolean((window as any).__TAURI__) ||
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
       const isRegisteredDevice = Boolean(localStorage.getItem('abdi_registration_token'));
+
       if (isStandalone || isRegisteredDevice) {
         return <Navigate to="/login" replace />;
       }
       return <LandingPage />;
     }
+
+    // Simpan redirect target
     const search = window.location.search;
     if (search) {
       sessionStorage.setItem("login_redirect_search", search);
@@ -59,59 +109,46 @@ function RootRouteHandler() {
     }
     return <Navigate to="/login" replace />;
   }
-  return <Layout />;
+
+  // Bungkus Layout dengan AppRoute sebagai percabangan level tertinggi
+  return (
+    <AppRoute>
+      <Layout />
+    </AppRoute>
+  );
 }
 
+// ─────────────────────────────────────────────────────────────
+// PUBLIC ONLY ROUTE — redirect ke dashboard jika sudah login
+// ─────────────────────────────────────────────────────────────
 function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
+  const { user, isAuthLoading } = useAuth();
+  if (isAuthLoading) return null;
   if (user) {
     return <Navigate to="/" replace />;
   }
   return <>{children}</>;
 }
 
-function ProtectedRoute({
-  children,
-  allowedRoles,
-}: {
-  children: React.ReactNode;
-  allowedRoles?: string[];
-}) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  if (!user) {
-    // Preserve search params for direct phone scans
-    const search = window.location.search;
-    if (search) {
-      sessionStorage.setItem("login_redirect_search", search);
-      sessionStorage.setItem("login_redirect_pathname", window.location.pathname);
-    }
-    return <Navigate to="/login" />;
-  }
-  if (allowedRoles && !allowedRoles.includes(user.role))
-    return <Navigate to="/" />;
-  return children;
-}
-
+// ─────────────────────────────────────────────────────────────
+// MAIN APP
+// ─────────────────────────────────────────────────────────────
 export default function App() {
   const [isRooted, setIsRooted] = React.useState(false);
 
   React.useEffect(() => {
-    // Simulasi deteksi Root/Jailbreak terenkripsi
+    // ── Root/Jailbreak Detection ────────────────────────────
     const checkRoot = async () => {
-      const isDeviceRooted = false;
+      const isDeviceRooted = false; // Production: implement proper detection
       if (isDeviceRooted) setIsRooted(true);
     };
     checkRoot();
 
-    // ── PWA Install Prompt (beforeinstallprompt) ──────────────────────
-    // Simpan event di window agar bisa dipanggil dari komponen manapun
+    // ── PWA Install Prompt (beforeinstallprompt) ────────────
     const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
       (window as any).__pwaInstallPrompt = e;
 
-      // Hanya tampilkan banner di perangkat mobile
       const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       const dismissed = sessionStorage.getItem('pwa_banner_dismissed');
       if (isMobile && !dismissed) {
@@ -131,7 +168,11 @@ export default function App() {
                     toast.dismiss(t.id);
                     sessionStorage.setItem('pwa_banner_dismissed', '1');
                   }}
-                  style={{ background: '#4f46e5', color: 'white', border: 'none', borderRadius: '8px', padding: '6px 12px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  style={{
+                    background: '#4f46e5', color: 'white', border: 'none',
+                    borderRadius: '8px', padding: '6px 12px', fontSize: '11px',
+                    fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap'
+                  }}
                 >
                   Install
                 </button>
@@ -145,7 +186,10 @@ export default function App() {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
 
-    const cleanupSync = initializeFirebaseSync();
+    // Cegah sinkronisasi Firebase berjalan di sesi demo
+    let cleanupSync: any = null;
+    cleanupSync = initializeFirebaseSync();
+
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
       if (typeof cleanupSync === 'function') cleanupSync();
@@ -174,171 +218,218 @@ export default function App() {
           <AuthProvider>
             <DeviceRegistrationModal />
             <FloatingEditTools />
-            <Toaster position="top-right" />
-            <Routes>
+            <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+              {/* ── PUBLIC ROUTES ─────────────────────────────── */}
               <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
               <Route path="/forgot-password" element={<PublicOnlyRoute><ForgotPassword /></PublicOnlyRoute>} />
               <Route path="/register" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
               <Route path="/landing" element={<PublicOnlyRoute><LandingPage /></PublicOnlyRoute>} />
               <Route path="/home" element={<PublicOnlyRoute><LandingPage /></PublicOnlyRoute>} />
+
+              {/* ── LIVE QR (Public — untuk kiosk/proyektor tanpa auth) ── */}
               <Route path="/live-qr" element={<LiveQRView />} />
               <Route path="/live-qr/:id" element={<LiveQRView />} />
 
+              {/* ── PRINT (Protected — butuh auth) ─────────────── */}
               <Route
                 path="/print/recap"
                 element={
-                  <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
+                  <AppRoute allowedRoles={['admin', 'kepala_sekolah', 'developer']}>
                     <PrintRecap />
-                  </ProtectedRoute>
+                  </AppRoute>
                 }
               />
-              <Route
-                path="/"
-                element={<RootRouteHandler />}
-              >
-                <Route index element={<Dashboard />} />
-                <Route path="profile" element={<Profile />} />
 
+              {/* ── MAIN APP (Layout wrapper) ───────────────────── */}
+              <Route path="/" element={<RootRouteHandler />}>
+                {/* Dashboard — semua role yang sudah login */}
+                <Route index element={<AppRoute><Dashboard /></AppRoute>} />
+
+                {/* Profil — semua role yang sudah login */}
+                <Route path="profile" element={<AppRoute><Profile /></AppRoute>} />
+                <Route path="account/security" element={<AppRoute><SecuritySettings /></AppRoute>} />
+
+                {/* ── ADMIN ROUTES ─────────────────────────── */}
                 <Route
                   path="admin/users"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "developer"]}>
+                    <AppRoute allowedRoles={ADMIN_ONLY_ROLES}>
                       <ManageUsers />
-                    </ProtectedRoute>
+                    </AppRoute>
                   }
                 />
                 <Route
                   path="admin/school"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
+                    <AppRoute allowedRoles={['admin', 'kepala_sekolah', 'developer']}>
                       <ManageSchool />
-                    </ProtectedRoute>
+                    </AppRoute>
                   }
                 />
                 <Route
                   path="admin/academic"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "developer"]}>
+                    <AppRoute allowedRoles={ADMIN_ONLY_ROLES}>
                       <ManageAcademic />
-                    </ProtectedRoute>
+                    </AppRoute>
                   }
                 />
                 <Route
                   path="admin/holidays"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "developer"]}>
+                    <AppRoute allowedRoles={ADMIN_ONLY_ROLES}>
                       <ManageHolidays />
-                    </ProtectedRoute>
+                    </AppRoute>
                   }
                 />
                 <Route
                   path="admin/recaps"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
+                    <AppRoute allowedRoles={ATTENDANCE_MANAGEMENT_ROLES}>
                       <PrincipalAttendanceRecaps />
-                    </ProtectedRoute>
+                    </AppRoute>
                   }
                 />
                 <Route
                   path="admin/attendance"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
+                    <AppRoute allowedRoles={ATTENDANCE_MANAGEMENT_ROLES}>
                       <ManageAttendance />
-                    </ProtectedRoute>
+                    </AppRoute>
                   }
                 />
                 <Route
                   path="admin/validation"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
+                    <AppRoute allowedRoles={ATTENDANCE_MANAGEMENT_ROLES}>
                       <LocalValidationCenter />
-                    </ProtectedRoute>
+                    </AppRoute>
                   }
                 />
                 <Route
                   path="admin/leave"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
+                    <AppRoute allowedRoles={ATTENDANCE_MANAGEMENT_ROLES}>
                       <ManageLeave />
-                    </ProtectedRoute>
+                    </AppRoute>
                   }
                 />
                 <Route
                   path="admin/schedule"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
+                    <AppRoute allowedRoles={ATTENDANCE_MANAGEMENT_ROLES}>
                       <ManageSchedule />
-                    </ProtectedRoute>
+                    </AppRoute>
                   }
                 />
                 <Route
                   path="admin/generate-qr"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "developer"]}>
+                    <AppRoute allowedRoles={ADMIN_ONLY_ROLES}>
                       <GenerateQR />
-                    </ProtectedRoute>
+                    </AppRoute>
                   }
                 />
                 <Route
                   path="admin/school-scanner"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
+                    <AppRoute allowedRoles={ATTENDANCE_MANAGEMENT_ROLES}>
                       <SchoolScanner />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="admin/developer"
-                  element={
-                    <ProtectedRoute allowedRoles={["developer"]}>
-                      <DeveloperConsole />
-                    </ProtectedRoute>
+                    </AppRoute>
                   }
                 />
                 <Route
                   path="admin/tenants"
                   element={
-                    <ProtectedRoute allowedRoles={["developer"]}>
+                    <AppRoute allowedRoles={['developer']}>
                       <ManageTenants />
-                    </ProtectedRoute>
+                    </AppRoute>
+                  }
+                />
+                <Route
+                  path="admin/system-config"
+                  element={
+                    <AppRoute allowedRoles={['developer']}>
+                      <SystemConfiguration />
+                    </AppRoute>
+                  }
+                />
+                <Route
+                  path="admin/landing-page"
+                  element={
+                    <AppRoute allowedRoles={['developer']}>
+                      <LandingPageSettings />
+                    </AppRoute>
+                  }
+                />
+                <Route
+                  path="admin/audit-logs"
+                  element={
+                    <AppRoute allowedRoles={['developer']}>
+                      <AuditLogs />
+                    </AppRoute>
+                  }
+                />
+                <Route
+                  path="admin/kiosk"
+                  element={
+                    <AppRoute allowedRoles={['developer']}>
+                      <KioskSettings />
+                    </AppRoute>
+                  }
+                />
+                <Route
+                  path="admin/danger-zone"
+                  element={
+                    <AppRoute allowedRoles={['developer']}>
+                      <DangerZone />
+                    </AppRoute>
                   }
                 />
                 <Route
                   path="admin/licenses"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
+                    <AppRoute allowedRoles={['admin', 'kepala_sekolah', 'developer']}>
                       <ManageLicenses />
-                    </ProtectedRoute>
+                    </AppRoute>
                   }
                 />
                 <Route
                   path="admin/ai-analytics"
                   element={
-                    <ProtectedRoute allowedRoles={["admin", "kepala_sekolah", "developer"]}>
+                    <AppRoute allowedRoles={['admin', 'kepala_sekolah', 'developer']}>
                       <AiAnalytics />
-                    </ProtectedRoute>
+                    </AppRoute>
                   }
                 />
 
+                {/* ── TEACHER / STAFF ROUTES ───────────────── */}
                 <Route
                   path="teacher/scan"
                   element={
-                    <ProtectedRoute allowedRoles={["guru", "staf_sekolah", "dosen", "staf_kampus", "kepala_sekolah", "admin", "developer"]}>
+                    <AppRoute allowedRoles={ATTENDANCE_CAPABLE_ROLES}>
                       <ScanQR />
-                    </ProtectedRoute>
+                    </AppRoute>
                   }
                 />
 
+                {/* ── PRINCIPAL ROUTES ─────────────────────── */}
                 <Route
                   path="principal/recaps"
                   element={
-                    <ProtectedRoute allowedRoles={["kepala_sekolah", "admin", "developer"]}>
+                    <AppRoute allowedRoles={['kepala_sekolah', 'admin', 'developer']}>
                       <PrincipalAttendanceRecaps />
-                    </ProtectedRoute>
+                    </AppRoute>
                   }
                 />
+
+                {/* ── CATCH ALL — redirect ke dashboard ───── */}
+                <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
-            </Routes>
+              </Routes>
+            </Suspense>
           </AuthProvider>
         </BrowserRouter>
       </EditModeProvider>

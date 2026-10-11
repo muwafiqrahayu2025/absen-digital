@@ -29,6 +29,9 @@ export function Profile() {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [confirmProfile, setConfirmProfile] = useState(false);
   const [confirmAccount, setConfirmAccount] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSavingPhoto, setIsSavingPhoto] = useState(false);
+  const [isSavingAccount, setIsSavingAccount] = useState(false);
 
   React.useEffect(() => {
     if (isTeacherOrStaff) {
@@ -77,17 +80,22 @@ export function Profile() {
     }
   };
 
-  const handlePhotoSave = () => {
+  const handlePhotoSave = async () => {
     if (!photoBase64) {
       toast.error("Silakan klik tombol 'Pilih Foto' terlebih dahulu untuk memilih gambar.");
       return;
     }
     if (user) {
-      db.updateUser(user.id, { photoUrl: photoBase64 });
-      login({ ...user, photoUrl: photoBase64 });
-      toast.success("Pas Foto Resmi berhasil disimpan & diterapkan untuk semua fitur aplikasi!");
-      setSelectedPhotoName("");
-      window.dispatchEvent(new Event("users_updated"));
+      setIsSavingPhoto(true);
+      try {
+        await db.updateUser(user.id, { photoUrl: photoBase64 });
+        login({ ...user, photoUrl: photoBase64 });
+        toast.success("Pas Foto Resmi berhasil disimpan & diterapkan untuk semua fitur aplikasi!");
+        setSelectedPhotoName("");
+        window.dispatchEvent(new Event("users_updated"));
+      } finally {
+        setIsSavingPhoto(false);
+      }
     }
   };
 
@@ -129,6 +137,46 @@ export function Profile() {
     password: user?.password || "",
   });
 
+  React.useEffect(() => {
+    if (user) {
+      setFormData(prev => ({
+        ...prev,
+        name: user.name || "",
+        nip: user.nip || "",
+        opd: user.opd || "-",
+        satker: user.satuanKerja || (user as any).satker || school?.name || "Nama Sekolah / Kampus",
+        jabatan: user.jabatan || "Guru / Dosen / Staf Utama",
+        gender: user.gender || "Laki-laki",
+        phone: user.phone || "",
+        email: user.email || "",
+        address: user.address || "",
+        mapelUtama: user.mapelUtama || "",
+        mapelSertifikasi: user.mapelSertifikasi || "",
+      }));
+      setAccountData(prev => ({
+        ...prev,
+        username: user.username || "",
+        password: user.password || "",
+      }));
+    }
+  }, [
+    user?.id,
+    user?.name,
+    user?.nip,
+    user?.opd,
+    user?.satuanKerja,
+    (user as any)?.satker,
+    user?.jabatan,
+    user?.gender,
+    user?.phone,
+    user?.email,
+    user?.address,
+    user?.mapelUtama,
+    user?.mapelSertifikasi,
+    user?.username,
+    user?.password
+  ]);
+
   const handleChange = (
     e: React.ChangeEvent<
       HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
@@ -141,34 +189,44 @@ export function Profile() {
     setAccountData({ ...accountData, [e.target.name]: e.target.value });
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    const { satker, ...restFormData } = formData;
-    const dataToSave = {
-      ...restFormData,
-      satuanKerja: satker, // keep in sync with schema
-    };
+    setIsSavingProfile(true);
+    try {
+      const { satker, ...restFormData } = formData;
+      const dataToSave = {
+        ...restFormData,
+        satuanKerja: satker, // keep in sync with schema
+      };
 
-    // Use centralized db.updateUser for consistent local + cloud sync
-    db.updateUser(user.id, dataToSave);
-    login({ ...user, ...dataToSave });
-    setConfirmProfile(false);
-    toast.success("Profil personel berhasil diperbarui.");
-    window.dispatchEvent(new Event("users_updated"));
+      // Use centralized db.updateUser for consistent local + cloud sync
+      await db.updateUser(user.id, dataToSave);
+      login({ ...user, ...dataToSave });
+      setConfirmProfile(false);
+      toast.success("Profil personel berhasil diperbarui.");
+      window.dispatchEvent(new Event("users_updated"));
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
-  const handleSaveAccount = (e: React.FormEvent) => {
+  const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    // Use centralized db.updateUser for consistent local + cloud sync
-    db.updateUser(user.id, accountData);
-    login({ ...user, ...accountData });
-    setConfirmAccount(false);
-    toast.success("Kredensial login akun berhasil diperbarui.");
-    window.dispatchEvent(new Event("users_updated"));
+    setIsSavingAccount(true);
+    try {
+      // Use centralized db.updateUser for consistent local + cloud sync
+      await db.updateUser(user.id, accountData);
+      login({ ...user, ...accountData });
+      setConfirmAccount(false);
+      toast.success("Kredensial login akun berhasil diperbarui.");
+      window.dispatchEvent(new Event("users_updated"));
+    } finally {
+      setIsSavingAccount(false);
+    }
   };
 
   const attendance = user
@@ -410,28 +468,26 @@ export function Profile() {
                     className="w-full px-3 py-1.5 border border-gray-200 rounded-xl min-h-[70px]"
                   />
                 </div>
-                <div className="grid grid-cols-[130px_1fr] items-center gap-4 pt-4 border-t border-gray-200">
-                  <div></div>
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={confirmProfile}
-                        onChange={(e) => setConfirmProfile(e.target.checked)}
-                        required
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                      />
-                      <span className="text-gray-500">
-                        Konfirmasi kesesuaian data
-                      </span>
-                    </label>
-                    <button
-                      type="submit"
-                      className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
-                    >
-                  <Save className="w-4 h-4" /> Simpan Perubahan
-                </button>
-                  </div>
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-4 border-t border-gray-100">
+                  <label className="flex items-center gap-2 cursor-pointer text-gray-500 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={confirmProfile}
+                      onChange={(e) => setConfirmProfile(e.target.checked)}
+                      required
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                    />
+                    <span>
+                      Konfirmasi kesesuaian data
+                    </span>
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={isSavingProfile}
+                    className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    <Save className="w-4 h-4" /> {isSavingProfile ? "Menyimpan..." : "Simpan Perubahan"}
+                  </button>
                 </div>
               </form>
             )}
@@ -500,10 +556,11 @@ export function Profile() {
                   <button
                     type="button"
                     onClick={handlePhotoSave}
-                    className="w-full sm:flex-1 py-3 px-5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-black text-xs shadow-lg shadow-purple-500/30 transition-all flex items-center justify-center gap-2 active:scale-95"
+                    disabled={isSavingPhoto}
+                    className="w-full sm:flex-1 py-3 px-5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-black text-xs shadow-lg shadow-purple-500/30 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
                   >
                     <Save size={16} />
-                    <span>Simpan Foto</span>
+                    <span>{isSavingPhoto ? "Menyimpan..." : "Simpan Foto"}</span>
                   </button>
                 </div>
               </div>
@@ -554,28 +611,26 @@ export function Profile() {
                     </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-[130px_1fr] items-center gap-4 pt-4 border-t border-gray-200">
-                  <div></div>
-                  <div className="flex items-center justify-between col-span-1">
-                    <label className="flex items-center gap-1.5 cursor-pointer selection:bg-white/5">
-                      <input
-                        type="checkbox"
-                        checked={confirmAccount}
-                        onChange={(e) => setConfirmAccount(e.target.checked)}
-                        required
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                      />
-                      <span className="text-gray-500">
-                        Konfirmasi kesesuaian sandi
-                      </span>
-                    </label>
-                    <button
-                      type="submit"
-                      className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
-                    >
-                  <Save className="w-4 h-4" /> Simpan Sandi
-                </button>
-                  </div>
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-4 border-t border-gray-100">
+                  <label className="flex items-center gap-2 cursor-pointer text-gray-500 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={confirmAccount}
+                      onChange={(e) => setConfirmAccount(e.target.checked)}
+                      required
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                    />
+                    <span>
+                      Konfirmasi kesesuaian sandi
+                    </span>
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={isSavingAccount}
+                    className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    <Save className="w-4 h-4" /> {isSavingAccount ? "Menyimpan..." : "Simpan Sandi"}
+                  </button>
                 </div>
               </form>
             )}

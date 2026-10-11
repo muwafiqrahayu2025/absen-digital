@@ -6,6 +6,7 @@ import { BiometricSelfie } from "../../components/BiometricSelfie";
 import { detectUserDevice, recordDeviceSessionLog } from "../../lib/deviceDetection";
 import { format } from "date-fns";
 import { id } from "date-fns/locale";
+import { apiClient, type AttendanceRequest, type AttendanceResponse, type ApiError } from "../../lib/apiClient";
 import {
   CheckCircle,
   XCircle,
@@ -139,7 +140,7 @@ export function ScanQR() {
   const isSyncingRef = useRef(isSyncing);
 
   const today = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
-  const school = useMemo(() => db.getSchool(), []);
+  const school = useMemo(() => ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any), []);
   const todayRecord = useMemo(
     () => attendance.find((a) => a.userId === user?.id && a.date === today),
     [attendance, user?.id, today],
@@ -215,7 +216,9 @@ export function ScanQR() {
       if (pendingCount > 0 && navigator.onLine && simMode !== "offline" && !isSyncingRef.current) {
         try {
           await syncOfflineAttendance();
+          if (!isMountedRef.current) return;
         } catch (err) {
+          if (!isMountedRef.current) return;
           console.warn("Background auto-sync failed");
         }
       }
@@ -294,80 +297,202 @@ export function ScanQR() {
     });
   }, [school]);
 
+  // ── Upload foto pending saat device kembali online ────────────────────────
+  const uploadPendingPhotos = useCallback(async () => {
+    const PENDING_PHOTOS_KEY = "abdi_pending_photos";
+    let pending: Array<{ attendanceId: string; tenantId: string; photoDataUrl: string }> = [];
+    try {
+      pending = JSON.parse(localStorage.getItem(PENDING_PHOTOS_KEY) ?? "[]");
+    } catch { return; }
+
+    if (pending.length === 0 || !navigator.onLine) return;
+
+    console.log(`[ScanQR] Mengupload ${pending.length} foto pending...`);
+    const remaining: typeof pending = [];
+
+    for (const item of pending) {
+      try {
+        await apiClient.post("/api/attendance/pending-photo", item);
+        console.log(`[ScanQR] Foto pending terupload: ${item.attendanceId}`);
+      } catch (err) {
+        console.warn(`[ScanQR] Gagal upload foto pending ${item.attendanceId}:`, err);
+        remaining.push(item);
+      }
+    }
+
+    localStorage.setItem(PENDING_PHOTOS_KEY, JSON.stringify(remaining));
+    if (remaining.length < pending.length) {
+      toast.success(`${pending.length - remaining.length} foto biometrik berhasil disinkronkan.`);
+    }
+  }, []);
+
+  // Auto-upload foto pending saat online
+  useEffect(() => {
+    const handler = () => uploadPendingPhotos();
+    window.addEventListener("online", handler);
+    // Coba upload saat komponen mount juga (jika sudah online)
+    uploadPendingPhotos();
+    return () => window.removeEventListener("online", handler);
+  }, [uploadPendingPhotos]);
+
   const processAttendance = useCallback(
     async (
       qrDataStr: string,
       mode: "check_in" | "check_out",
       locationData?: LocationData,
       methodType: "scanner" | "file" | "external_scanner" = "scanner",
-      photoDataUrl?: string,
+      photoDataUrlWithStatus?: string,
     ) => {
+      const schoolId = user?.tenantId;
+      const userId   = user?.id;
+      
+      let photoDataUrl = photoDataUrlWithStatus;
+      let biometricStatus = "unverified";
+      
+      // Parse biometric status jika ada (format: data:image/...|BIOMETRIC:status)
+      if (photoDataUrlWithStatus && photoDataUrlWithStatus.includes('|BIOMETRIC:')) {
+        const parts = photoDataUrlWithStatus.split('|BIOMETRIC:');
+        photoDataUrl = parts[0];
+        biometricStatus = parts[1] || "unverified";
+      }
+
+      // ── Validasi identitas user ──────────────────────────────────────────
+      if (!schoolId || schoolId === "undefined" || schoolId === "null") {
+        playAudioFeedback("error");
+        setAttendanceResult({ type: "error", text: "Error: Data Sekolah hilang! Silakan relogin." });
+        setAttendanceFlowStep("result");
+        return;
+      }
+      if (!userId || userId === "undefined" || userId === "null") {
+        playAudioFeedback("error");
+        setAttendanceResult({ type: "error", text: "Error: Data User tidak valid! Silakan relogin." });
+        setAttendanceFlowStep("result");
+        return;
+      }
+
+      // ── PATH ONLINE: Kirim ke backend (enkripsi + geofence di server) ──────
+      if (navigator.onLine && simMode !== "offline") {
+        try {
+          const payload: AttendanceRequest = {
+            tenantId:   schoolId,
+            latitude:   locationData?.latitude ?? 0,
+            longitude:  locationData?.longitude ?? 0,
+            photoDataUrl: photoDataUrl, // foto mentah — backend yang enkripsi
+            mode,
+            methodType: methodType ?? "scanner",
+            date:       today,
+            biometricStatus, // Tambahkan status biometrik ("verified" | "pending_manual")
+          };
+
+          const { data } = await apiClient.post<AttendanceResponse>("/api/attendance", payload);
+
+          recordDeviceSessionLog({
+            userId,
+            userName:  user!.name,
+            userRole:  user!.role,
+            action:    mode === "check_in" ? "PRESENSI_IN" : "PRESENSI_OUT",
+            details:   `Presensi ${mode} via ${methodType} — backend validated. dist=${data.distance}m`,
+            status:    data.flaggedForReview ? "SUSPICIOUS" : "SUCCESS",
+          });
+
+          playAudioFeedback("success");
+          const flagNote = data.flaggedForReview ? " ⚠️ (lokasi ditandai untuk review)" : "";
+          setAttendanceResult({
+            type: "success",
+            text: `✅ Absensi ${mode === "check_in" ? "MASUK" : "PULANG"} berhasil! Jarak: ${data.distance}m${flagNote}`,
+          });
+          setAttendanceFlowStep("result");
+          return;
+
+        } catch (err: any) {
+          const apiErr = err as ApiError;
+
+          // Geofence / GPS rejection dari server
+          if (apiErr.status === 403 && apiErr.error === "out-of-range") {
+            playAudioFeedback("error");
+            setAttendanceResult({ type: "error", text: `❌ ${apiErr.message}` });
+            setAttendanceFlowStep("result");
+            return;
+          }
+
+          // Rate limited
+          if (apiErr.status === 429) {
+            playAudioFeedback("error");
+            setAttendanceResult({ type: "error", text: "⏱️ Terlalu banyak percobaan. Tunggu sebentar." });
+            setAttendanceFlowStep("result");
+            return;
+          }
+
+          // Network error / server down → fallback ke offline
+          console.warn("[ScanQR] Backend tidak tersedia, fallback ke offline mode:", apiErr);
+          toast.error("Server tidak tersedia — data disimpan lokal tanpa foto.", { duration: 5000 });
+          // JATUH KE: offline fallback di bawah
+        }
+      }
+
+      // ── PATH OFFLINE: Simpan tanpa foto (status pending_photo) ────────────
+      // Foto biometrik TIDAK disimpan di localStorage untuk melindungi privasi.
+      // Foto akan diupload via /api/attendance/pending-photo saat online kembali.
       try {
-        const schoolId = user?.tenantId;
-        const userId = user?.id;
-
-        // 1. VALIDASI SUPER KETAT (Rem Darurat)
-        // Mencegah "Salah Alamat" dengan memastikan id tidak kosong
-        if (!schoolId || schoolId === 'undefined' || schoolId === 'null') {
-          playAudioFeedback("error");
-          setAttendanceResult({ type: "error", text: "Error: Data Sekolah (schoolId) hilang! Silakan relogin." });
-          setAttendanceFlowStep("result");
-          return;
-        }
-
-        if (!userId || userId === 'undefined' || userId === 'null') {
-          playAudioFeedback("error");
-          setAttendanceResult({ type: "error", text: "Error: Data User (userId) tidak valid! Silakan relogin." });
-          setAttendanceFlowStep("result");
-          return;
-        }
-
-        const timeNow = format(new Date(), "HH:mm:ss");
+        const timeNow   = format(new Date(), "HH:mm:ss");
         const checkInLimit = school?.operationalCheckInLimit || "08:00";
-        const isLate = timeNow > checkInLimit + ":00";
+        const isLate    = timeNow > (checkInLimit + ":00");
+        const offlineId = `OFFLINE-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 
-        // 2. PATH AMAN (Variabel sudah pasti ada isinya)
-        const { getDatabase, ref, push, set, serverTimestamp } = await import("firebase/database");
-        const dbInstance = getDatabase();
-        // Menggunakan path aman yang menghindari Permission Denied
-        const dbPath = `tenants/${schoolId}/attendance`;
-        const attendanceRef = ref(dbInstance, dbPath);
+        // Simpan record absensi tanpa foto
+        const offlineRecord = {
+          id:             offlineId,
+          userId,
+          date:           today,
+          checkInTime:    mode === "check_in"  ? timeNow : undefined,
+          checkOutTime:   mode === "check_out" ? timeNow : undefined,
+          status:         isLate && mode === "check_in" ? "Terlambat" : "Hadir",
+          latitude:       locationData?.latitude,
+          longitude:      locationData?.longitude,
+          distance:       locationData?.distance,
+          method:         methodType,
+          photoDataUrl:   "ABDI_SRV_v1:pending", // marker: foto belum diupload
+          isSynced:       false,
+          syncStatus:     "pending",
+          photoUploadPending: true,
+          recordedOffline: true,
+          biometricStatus, // Simpan status biometrik secara lokal
+        };
 
-        const newRecordRef = push(attendanceRef); 
-        await set(newRecordRef, {
-          userId: userId,
-          date: today,
-          checkInTime: mode === "check_in" ? timeNow : undefined,
-          checkOutTime: mode === "check_out" ? timeNow : undefined,
-          status: isLate && mode === "check_in" ? "Terlambat" : "Hadir",
-          latitude: locationData?.latitude,
-          longitude: locationData?.longitude,
-          distance: locationData?.distance,
-          method: methodType,
-          photoDataUrl: photoDataUrl,
-          waktuAbsen: serverTimestamp()
-        });
+        saveAttendance([...attendance, offlineRecord as any]);
+
+        // Simpan foto terpisah di antrian pending (bukan di localStorage attendance)
+        if (photoDataUrl) {
+          const PENDING_PHOTOS_KEY = "abdi_pending_photos";
+          let pendingPhotos: Array<{ attendanceId: string; tenantId: string; photoDataUrl: string }> = [];
+          try { pendingPhotos = JSON.parse(localStorage.getItem(PENDING_PHOTOS_KEY) ?? "[]"); } catch { }
+          pendingPhotos.push({ attendanceId: offlineId, tenantId: schoolId, photoDataUrl });
+          localStorage.setItem(PENDING_PHOTOS_KEY, JSON.stringify(pendingPhotos));
+        }
 
         recordDeviceSessionLog({
-          userId: userId,
-          userName: user!.name,
-          userRole: user!.role,
-          action: mode === "check_in" ? "PRESENSI_IN" : "PRESENSI_OUT",
-          details: `Presensi ${mode} via ${methodType} (Jalur Rem Darurat)`,
-          status: "SUCCESS",
+          userId,
+          userName:  user!.name,
+          userRole:  user!.role,
+          action:    mode === "check_in" ? "PRESENSI_IN" : "PRESENSI_OUT",
+          details:   `Presensi ${mode} via ${methodType} — OFFLINE (foto pending upload)`,
+          status:    "INFO",
         });
 
         playAudioFeedback("success");
-        setAttendanceResult({ type: "success", text: `✅ Absensi ${mode === "check_in" ? "MASUK" : "PULANG"} berhasil dicatat!` });
+        setAttendanceResult({
+          type: "success",
+          text: `✅ Absensi ${mode === "check_in" ? "MASUK" : "PULANG"} disimpan lokal. Foto akan disinkronkan saat online.`,
+        });
         setAttendanceFlowStep("result");
       } catch (e: any) {
-        console.error("Gagal menyimpan data:", e);
+        console.error("Gagal menyimpan offline:", e);
         playAudioFeedback("error");
-        setAttendanceResult({ type: "error", text: "Error: Permission Denied atau Koneksi Gagal." });
+        setAttendanceResult({ type: "error", text: "Error: Gagal menyimpan data. Silakan coba lagi." });
         setAttendanceFlowStep("result");
       }
     },
-    [today, user?.id, simMode, school, saveAttendance, playAudioFeedback],
+    [today, user?.id, user?.name, user?.role, simMode, school, attendance, saveAttendance, playAudioFeedback, uploadPendingPhotos],
   );
 
   const handleStartScan = useCallback((mode: "check_in" | "check_out") => {
@@ -475,6 +600,9 @@ export function ScanQR() {
   const handleSubmitManual = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
+      // [C1] Pemblokir Double-Submit Absen Manual
+      if (isSubmittingManual) return;
+      
       const existing = attendance.find((a) => a.userId === user?.id && a.date === today);
       if (existing?.checkInTime) { toast.error("Sudah absen."); return; }
       if ((existing as any)?.approvalStatus === "Pending") { toast.error("Ada pengajuan pending."); return; }

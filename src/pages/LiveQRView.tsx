@@ -45,7 +45,7 @@ export function LiveQRView() {
   // ──────────────────────────────────────────────────────────
   // STATE
   // ──────────────────────────────────────────────────────────
-  const [school, setSchool] = useState(() => db.getSchool());
+  const [school, setSchool] = useState<any>(() => ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any));
   // scale hanya berlaku di layar lg (≥1024px). Di mobile selalu 1.
   const [scale, setScale] = useState<number>(1);
   const [isDesktop, setIsDesktop] = useState<boolean>(
@@ -79,13 +79,13 @@ export function LiveQRView() {
 
   const [logoUrl, setLogoUrl] = useState<string>(() => {
     const saved = localStorage.getItem("qr_embedded_logo_admin");
-    const schoolData = db.getSchool();
+    const schoolData: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
     return saved || schoolData.logoUrl || schoolData.kopSurat?.logo_url || "/logo.png";
   });
 
   const [kioskBgUrl, setKioskBgUrl] = useState<string>(() => {
     const savedBg = localStorage.getItem("qr_kiosk_bg_url");
-    const schoolData = db.getSchool();
+    const schoolData: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
     return (savedBg && savedBg.trim() !== "")
       ? savedBg
       : (schoolData.kioskBgUrl && schoolData.kioskBgUrl.trim() !== "")
@@ -95,7 +95,7 @@ export function LiveQRView() {
 
   const [youtubeUrl, setYoutubeUrl] = useState<string>(() => {
     const savedYt = localStorage.getItem("qr_youtube_video_url");
-    const schoolData = db.getSchool();
+    const schoolData: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
     return (savedYt !== null && savedYt.trim() !== "")
       ? savedYt
       : (schoolData.youtubeVideoUrl || "");
@@ -103,7 +103,7 @@ export function LiveQRView() {
 
   const [marqueeText, setMarqueeText] = useState<string>(() => {
     const savedMarquee = localStorage.getItem("qr_marquee_text");
-    const schoolData = db.getSchool();
+    const schoolData: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
     return (savedMarquee !== null && savedMarquee !== undefined && savedMarquee.trim() !== "")
       ? savedMarquee
       : (schoolData.marqueeText || "");
@@ -201,7 +201,7 @@ export function LiveQRView() {
     }
 
     const savedBg = localStorage.getItem("qr_kiosk_bg_url");
-    const latestSchool = db.getSchool();
+    const latestSchool = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
     const activeBg = (savedBg && savedBg.trim() !== "")
       ? savedBg
       : (latestSchool.kioskBgUrl && latestSchool.kioskBgUrl.trim() !== "")
@@ -221,7 +221,7 @@ export function LiveQRView() {
       : (latestSchool.marqueeText || "");
     setMarqueeText((prev) => (prev === activeMarquee ? prev : activeMarquee));
 
-    const newSchool = db.getSchool();
+    const newSchool = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
     setSchool((prev) => {
       if (JSON.stringify(prev) === JSON.stringify(newSchool)) return prev;
       return newSchool;

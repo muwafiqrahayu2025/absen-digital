@@ -20,7 +20,7 @@ export function PackageActivationCard({ isModal = false }: { isModal?: boolean }
     }
     setIsSubmitting(true);
     setTimeout(() => {
-      const school = db.getSchool();
+      const school: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
       const res = activateByToken(
         tokenInput.trim(),
         school.name || "Instansi / Sekolah / Kampus",

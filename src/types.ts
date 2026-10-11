@@ -55,6 +55,7 @@ export interface User {
   username: string;
   name: string;
   role: Role;
+  originalRole?: Role;
   password?: string;
   nip?: string;
   nuptk?: string;
@@ -229,7 +230,7 @@ export interface ClassSchedule {
   endTime: string;
 }
 
-export type LicensePlan = 'trial' | 'full' | 'hibah' | 'starter' | 'pro' | 'enterprise';
+export type LicensePlan = 'trial' | 'full' | 'hibah';
 
 export interface SchoolLicense {
   plan: LicensePlan;

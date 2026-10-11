@@ -1,6 +1,10 @@
 import React, { useState, useRef } from "react";
 import { useAuth } from "./AuthContext";
 import { db } from "../lib/db";
+import { update } from "firebase/database";
+import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { updateProfile } from "firebase/auth";
+import { getTenantRef, auth, storage } from "../lib/firebase";
 import {
   UserCircle,
   Building,
@@ -12,11 +16,14 @@ import {
   Camera,
   FolderOpen,
   LogOut,
+  Upload
 } from "lucide-react";
 import { subDays, format, addDays } from "date-fns";
 import { id as localeID } from "date-fns/locale";
 import toast from "react-hot-toast";
 import { QRCodeSVG } from "qrcode.react";
+import { useLicense } from "../hooks/useLicense";
+import { BiometricEnrollment } from "./BiometricEnrollment";
 
 interface ProfileTabContentProps {
   /** Dipanggil saat tombol Keluar ditekan */
@@ -25,7 +32,8 @@ interface ProfileTabContentProps {
 
 export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
   const { user, login } = useAuth();
-  const school = db.getSchool();
+  const { config: licenseConfig } = useLicense();
+  const school: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
   const yayasanName =
     "YAYASAN " +
     (school.name || "AL-HIDAYAH")
@@ -33,7 +41,7 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
       .toUpperCase();
 
   const [activeTab, setActiveTab] = useState<
-    "profil" | "foto" | "akun" | "riwayat" | "kartu_qr"
+    "profil" | "foto" | "akun" | "biometrik" | "riwayat" | "kartu_qr"
   >("profil");
 
   const [personalLogoUrl, setPersonalLogoUrl] = useState<string>(() => {
@@ -49,6 +57,7 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [confirmProfile, setConfirmProfile] = useState(false);
   const [confirmAccount, setConfirmAccount] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [historyMonth, setHistoryMonth] = useState(
     format(new Date(), "yyyy-MM")
   );
@@ -76,6 +85,46 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
     password: user?.password || "",
   });
 
+  React.useEffect(() => {
+    if (user) {
+      setFormData(prev => ({
+        ...prev,
+        name: user.name || "",
+        nip: user.nip || "",
+        opd: user.opd || "-",
+        satker: user.satuanKerja || (user as any).satker || school?.name || "Nama Sekolah / Kampus",
+        jabatan: user.jabatan || "Guru / Dosen / Staf Utama",
+        gender: user.gender || "Laki-laki",
+        phone: user.phone || "",
+        email: user.email || "",
+        address: user.address || "",
+        mapelUtama: user.mapelUtama || "",
+        mapelSertifikasi: user.mapelSertifikasi || "",
+      }));
+      setAccountData(prev => ({
+        ...prev,
+        username: user.username || "",
+        password: user.password || "",
+      }));
+    }
+  }, [
+    user?.id,
+    user?.name,
+    user?.nip,
+    user?.opd,
+    user?.satuanKerja,
+    (user as any)?.satker,
+    user?.jabatan,
+    user?.gender,
+    user?.phone,
+    user?.email,
+    user?.address,
+    user?.mapelUtama,
+    user?.mapelSertifikasi,
+    user?.username,
+    user?.password
+  ]);
+
   // ── Handlers ───────────────────────────────────────────────
   const handleChange = (
     e: React.ChangeEvent<
@@ -89,64 +138,99 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
     setAccountData({ ...accountData, [e.target.name]: e.target.value });
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-    const { satker, ...restFormData } = formData;
-    const dataToSave = { ...restFormData, satuanKerja: satker };
-    db.updateUser(user.id, dataToSave);
-    login({ ...user, ...dataToSave });
-    setConfirmProfile(false);
-    toast.success("Profil personel berhasil diperbarui.");
-    window.dispatchEvent(new Event("users_updated"));
-  };
+    if (!user || !user.id) {
+      toast.error("Gagal menyimpan: ID Pengguna tidak ditemukan.");
+      return;
+    }
+    try {
+      const { satker, ...restFormData } = formData;
+      const dataToSave = { ...restFormData, satuanKerja: satker, phone: formData.phone, email: formData.email };
+      
+      const userRef = getTenantRef(`users/${user.id}`);
+      
+      console.log("=== DEBUG FIREBASE SAVE ===");
+      console.log("1. User ID / Path:", user?.id, "Full Path:", `users/${user.id}`);
+      console.log("2. Payload yang akan dikirim:", dataToSave);
+      console.log("===========================");
 
-  const handleSaveAccount = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    db.updateUser(user.id, accountData);
-    login({ ...user, ...accountData });
-    setConfirmAccount(false);
-    toast.success("Kredensial login akun berhasil diperbarui.");
-    window.dispatchEvent(new Event("users_updated"));
-  };
+      await update(userRef, dataToSave);
+      
+      if (auth.currentUser && dataToSave.name) {
+        await updateProfile(auth.currentUser, { displayName: dataToSave.name });
+      }
 
-  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedPhotoName(file.name);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          const MAX = 400;
-          let { width, height } = img;
-          if (width > height) {
-            if (width > MAX) { height = Math.round((height * MAX) / width); width = MAX; }
-          } else {
-            if (height > MAX) { width = Math.round((width * MAX) / height); height = MAX; }
-          }
-          canvas.width = width;
-          canvas.height = height;
-          canvas.getContext("2d")?.drawImage(img, 0, 0, width, height);
-          setPhotoBase64(canvas.toDataURL("image/jpeg", 0.8));
-          toast.success(`Foto "${file.name}" siap! Klik 'Simpan Foto' untuk menyimpan.`);
-        };
-        img.src = event.target?.result as string;
-      };
-      reader.readAsDataURL(file);
+      db.updateUser(user.id, dataToSave);
+      login({ ...user, ...dataToSave });
+      setConfirmProfile(false);
+      toast.success("Profil personel berhasil diperbarui.");
+      window.dispatchEvent(new Event("users_updated"));
+    } catch (error: any) {
+      toast.error(error.message || "Gagal menyimpan perubahan ke server");
     }
   };
 
-  const handlePhotoSave = () => {
-    if (!photoBase64) { toast.error("Pilih foto terlebih dahulu."); return; }
-    if (user) {
-      db.updateUser(user.id, { photoUrl: photoBase64 });
-      login({ ...user, photoUrl: photoBase64 });
-      toast.success("Pas Foto Resmi berhasil disimpan!");
-      setSelectedPhotoName("");
+  const handleSaveAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !user.id) {
+      toast.error("Gagal menyimpan: ID Pengguna tidak ditemukan.");
+      return;
+    }
+    try {
+      const userRef = getTenantRef(`users/${user.id}`);
+
+      console.log("=== DEBUG FIREBASE SAVE ===");
+      console.log("1. User ID / Path:", user?.id, "Full Path:", `users/${user.id}`);
+      console.log("2. Payload yang akan dikirim:", accountData);
+      console.log("===========================");
+
+      await update(userRef, accountData);
+      
+      db.updateUser(user.id, accountData);
+      login({ ...user, ...accountData });
+      setConfirmAccount(false);
+      toast.success("Kredensial login akun berhasil diperbarui.");
       window.dispatchEvent(new Event("users_updated"));
+    } catch (error: any) {
+      toast.error(error.message || "Gagal menyimpan kredensial ke server");
+    }
+  };
+
+  const handleUploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!auth.currentUser || !user?.id) {
+      toast.error("Sesi tidak valid, harap login ulang.");
+      return;
+    }
+
+    try {
+      setIsUploadingPhoto(true);
+      const uid = auth.currentUser.uid;
+      const fileRef = storageRef(storage, `avatars/${uid}`);
+      
+      await uploadBytes(fileRef, file);
+      const newUrl = await getDownloadURL(fileRef);
+
+      await updateProfile(auth.currentUser, { photoURL: newUrl });
+      
+      const userRef = getTenantRef(`users/${user.id}`);
+      await update(userRef, { photoUrl: newUrl });
+
+      db.updateUser(user.id, { photoUrl: newUrl });
+      setPhotoBase64(newUrl);
+      login({ ...user, photoUrl: newUrl });
+      
+      toast.success("Foto profil berhasil diperbarui!");
+      window.dispatchEvent(new Event("users_updated"));
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      toast.error(error.message || "Gagal mengunggah foto profil");
+    } finally {
+      setIsUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = "";
     }
   };
 
@@ -200,6 +284,10 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
           <p className="text-[10px] text-indigo-600 font-extrabold uppercase bg-indigo-50 border border-indigo-100 px-3 py-0.5 rounded-full">
             {user?.role === "kepala_sekolah" ? "KEPALA SEKOLAH / REKTOR" : (user?.role || "").replace("_", " ")}
           </p>
+          <div className={`mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-sm ${licenseConfig.badgeColor}`}>
+            <Award size={12} className="shrink-0" />
+            <span>{licenseConfig.name}</span>
+          </div>
           <div className="w-full border-t border-gray-100 mt-4 pt-3 space-y-2 text-left text-[11px] text-gray-500">
             <div className="flex items-center gap-2">
               <Building size={13} className="text-gray-400 shrink-0" />
@@ -216,7 +304,7 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
         <div className="bg-white rounded-3xl border border-gray-200 overflow-hidden shadow-sm">
           {/* Tab buttons */}
           <div className="flex border-b border-gray-100 px-3 overflow-x-auto scrollbar-none gap-0.5">
-            {(["profil", "foto", "akun"] as const).map((tab) => (
+            {(["profil", "foto", "akun", "biometrik"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -226,7 +314,7 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
                     : "bg-transparent border-transparent text-gray-400 hover:text-gray-600"
                 }`}
               >
-                {tab === "profil" ? "Biodata" : tab === "foto" ? "Pas Foto" : "Akun & Sandi"}
+                {tab === "profil" ? "Biodata" : tab === "foto" ? "Pas Foto" : tab === "biometrik" ? "Wajah (Biometrik)" : "Akun & Sandi"}
               </button>
             ))}
             {showTeacherSections && (
@@ -341,8 +429,8 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:border-indigo-300 focus:outline-none transition resize-none"
                   />
                 </div>
-                <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-3">
-                  <label className="flex items-center gap-2 cursor-pointer select-none text-[11px] text-gray-500">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-4 border-t border-gray-100">
+                  <label className="flex items-center gap-2 cursor-pointer text-[11px] text-gray-500">
                     <input
                       type="checkbox"
                       checked={confirmProfile}
@@ -350,11 +438,11 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
                       required
                       className="rounded border-slate-300 text-indigo-600 w-3.5 h-3.5"
                     />
-                    Konfirmasi kesesuaian data
+                    <span>Konfirmasi kesesuaian data</span>
                   </label>
                   <button
                     type="submit"
-                    className="flex items-center gap-2 py-2.5 px-5 font-bold text-white text-xs rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-lg hover:-translate-y-0.5 active:translate-y-0.5 transition-all duration-200 whitespace-nowrap"
+                    className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-5 font-bold text-white text-xs rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-lg hover:-translate-y-0.5 active:translate-y-0.5 transition-all duration-200 whitespace-nowrap"
                   >
                     <Save size={13} /> Simpan
                   </button>
@@ -369,8 +457,9 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
                   type="file"
                   ref={photoInputRef}
                   accept="image/*"
-                  onChange={handlePhotoSelect}
+                  onChange={handleUploadAvatar}
                   className="hidden"
+                  disabled={isUploadingPhoto}
                 />
                 <div className="relative group">
                   <div className="w-28 h-28 rounded-full p-1.5 bg-gradient-to-tr from-purple-600 via-indigo-600 to-blue-500 shadow-xl flex items-center justify-center">
@@ -385,7 +474,8 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
                   <button
                     type="button"
                     onClick={() => photoInputRef.current?.click()}
-                    className="absolute bottom-1 right-1 w-9 h-9 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-lg border-2 border-white hover:scale-110 active:scale-95 transition-all"
+                    disabled={isUploadingPhoto}
+                    className="absolute bottom-1 right-1 w-9 h-9 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-lg border-2 border-white hover:scale-110 active:scale-95 transition-all disabled:opacity-50"
                   >
                     <Camera size={15} />
                   </button>
@@ -398,29 +488,33 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
                     Unggah pas foto formal. Foto ini digunakan pada biodata, kartu QR, dan laporan resmi.
                   </p>
                 </div>
-                {selectedPhotoName && (
-                  <div className="bg-purple-50 border border-purple-200 rounded-xl py-2 px-3 flex items-center gap-2 text-xs text-purple-700 max-w-xs w-full">
-                    <FolderOpen size={14} className="shrink-0 text-purple-600" />
-                    <span className="truncate">Terpilih: <strong>{selectedPhotoName}</strong></span>
-                  </div>
-                )}
-                <div className="flex gap-3 w-full max-w-xs">
+                
+                <div className="flex flex-col items-center justify-center gap-3 w-full max-w-xs pt-2">
                   <button
                     type="button"
                     onClick={() => photoInputRef.current?.click()}
-                    className="flex-1 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 border border-slate-200 active:scale-95 transition-all"
+                    disabled={isUploadingPhoto}
+                    className="w-full py-3 px-5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-black text-xs shadow-lg shadow-purple-500/30 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
                   >
-                    <FolderOpen size={14} className="text-purple-600" /> Pilih Foto
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handlePhotoSave}
-                    className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all"
-                  >
-                    <Save size={14} /> Simpan Foto
+                    {isUploadingPhoto ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Mengunggah...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={14} />
+                        <span>Ubah Foto Profil</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
+            )}
+
+            {/* ── TAB: BIOMETRIK ── */}
+            {activeTab === "biometrik" && (
+              <BiometricEnrollment />
             )}
 
             {/* ── TAB: AKUN & SANDI ── */}
@@ -461,8 +555,8 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
                     </button>
                   </div>
                 </div>
-                <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-3">
-                  <label className="flex items-center gap-2 cursor-pointer select-none text-[11px] text-gray-500">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-4 border-t border-gray-100">
+                  <label className="flex items-center gap-2 cursor-pointer text-[11px] text-gray-500">
                     <input
                       type="checkbox"
                       checked={confirmAccount}
@@ -470,11 +564,11 @@ export function ProfileTabContent({ onLogout }: ProfileTabContentProps) {
                       required
                       className="rounded border-slate-300 text-indigo-600 w-3.5 h-3.5"
                     />
-                    Konfirmasi kesesuaian sandi
+                    <span>Konfirmasi kesesuaian sandi</span>
                   </label>
                   <button
                     type="submit"
-                    className="flex items-center gap-2 py-2.5 px-5 font-bold text-white text-xs rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-lg hover:-translate-y-0.5 active:translate-y-0.5 transition-all duration-200 whitespace-nowrap"
+                    className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-5 font-bold text-white text-xs rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-lg hover:-translate-y-0.5 active:translate-y-0.5 transition-all duration-200 whitespace-nowrap"
                   >
                     <Save size={13} /> Simpan Sandi
                   </button>

@@ -1,6 +1,10 @@
 import { User } from '../types';
 import { db } from './db';
 import { toast } from 'react-hot-toast';
+import { ref, get } from 'firebase/database';
+import { dbRealtime } from './firebase';
+// [FASE-3-SECURITY] Import proxy client — Key tidak pernah menyentuh frontend
+import { callSendWhatsApp } from './functionsProxy';
 export type NotificationEvent = 'OTP_CODE' | 'SECURITY_LOCK' | 'PASSWORD_RESET' | 'LOGIN_SUCCESS' | 'ATTENDANCE_RECORDED' | 'ATTENDANCE_REMINDER' | 'LEAVE_SUBMITTED' | 'LEAVE_STATUS_UPDATED' | 'MONTHLY_ATTENDANCE_SUMMARY' | 'BROADCAST_MESSAGE';
 interface NotificationData {
   appName?: string;
@@ -16,10 +20,30 @@ export const NotificationService = {
    * Mengirim notifikasi (simulasi) ke WhatsApp dan Email pengguna.
    * Di lingkungan production, fungsi ini akan memanggil API (seperti Wablas, Fonnte, SendGrid).
    */
-  send: (user: User, eventType: NotificationEvent, data: NotificationData = {}) => {
-    const school = db.getSchool();
+  send: async (user: User, eventType: NotificationEvent, data: NotificationData = {}) => {
+    const school = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 });
     const appName = data.appName || 'Sistem ABDI Absen Digital';
     const currentTime = data.time || new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+    
+    // [FASE-3-SECURITY] Key TIDAK lagi diambil dari RTDB di sisi frontend.
+    // Pengambilan key dilakukan server-side oleh Cloud Function proxy.
+    // Variabel berikut hanya digunakan untuk email (GAS) dan fallback UI.
+    let gasEmailUrl = "";
+    try {
+      const apiRef = ref(dbRealtime, 'global_settings/apiKeys/notif');
+      const snapshot = await get(apiRef);
+      if (snapshot.exists()) {
+        const notifData = snapshot.val();
+        // Hanya ambil GAS URL (non-secret) — waToken TIDAK diambil lagi
+        gasEmailUrl = notifData.gasWebAppUrl || "";
+      }
+    } catch (e) {
+      console.warn("[notifications] Gagal fetch config GAS:", e);
+    }
+    
+    // Tentukan tenantId dari user session
+    const sessionUser = JSON.parse(localStorage.getItem("active_session_user") || "{}");
+    const tenantId: string = sessionUser.tenantId || user.tenantId || "";
     
     const waFooter = `\n\n---\n🏢 *${school.name}*\n_Powered by Alpha Project_`;
     
@@ -345,99 +369,48 @@ ${emailFooter}
       recipient: user.id
     });
 
-    // 2. Kirim WhatsApp via WA Gateway (Wablas / Fonnte)
-    const rawToken = eventType === 'OTP_CODE' && school.whatsappApiKeyOtp ? school.whatsappApiKeyOtp : school.whatsappApiKey;
-    const isWablas = school.waGatewayProvider === 'wablas';
-    
-    // Bersihkan token (jika dipisah spasi atau koma menjadi format token.secret untuk Wablas)
-    let waToken = rawToken ? rawToken.trim() : "";
-    let wablasSecret = "";
-    if (isWablas && waToken) {
-      const parts = waToken.split(/[\.\s,]+/);
-      if (parts.length > 1) {
-        waToken = `${parts[0]}.${parts[1]}`;
-        wablasSecret = parts[1];
-      }
-    }
+    // 2. Kirim WhatsApp via Cloud Function (Proxy Server)
 
     if (eventType === 'OTP_CODE' && data?.extraInfo) {
       toast.success(`🔐 KODE OTP LOGIN ANDA: [ ${data.extraInfo} ]`, { duration: 30000, icon: '🔑' });
     }
 
-    if (waToken && user.phone) {
-      // Pastikan nomor berawalan 62 atau 08
-      let phone = user.phone.replace(/\D/g, '');
-      if (phone.startsWith('0')) phone = '62' + phone.substring(1);
-      
-      const toastWaId = eventType !== 'OTP_CODE' ? toast.loading(`Mengirim WhatsApp ke ${phone}...`) : undefined;
-      
-      const fetchUrl = isWablas 
-        ? `${(school.wablasServerUrl || 'https://smg.wablas.com').replace(/\/$/, '')}/api/v2/send-message`
-        : 'https://api.fonnte.com/send';
-      
-      const reqHeaders: Record<string, string> = {
-        'Authorization': waToken
-      };
-      if (isWablas) {
-        reqHeaders['Content-Type'] = 'application/json';
-      }
+    // [FASE-3-SECURITY] Ganti fetch langsung ke WA Gateway dengan Cloud Function proxy
+    // Frontend tidak lagi memegang atau mengirim API Key ke luar
+    if (user.phone && tenantId) {
+      let cleanPhone = user.phone.replace(/\D/g, '');
+      if (cleanPhone.startsWith('0')) cleanPhone = '62' + cleanPhone.substring(1);
 
-      const reqBody = isWablas
-        ? JSON.stringify({
-            data: [
-              {
-                phone: phone,
-                message: waMessage,
-                secret: wablasSecret || false
-              }
-            ]
-          })
-        : new URLSearchParams({
-            target: phone,
-            message: waMessage,
-            countryCode: '62'
-          });
+      const toastWaId = eventType !== 'OTP_CODE' ? toast.loading(`Mengirim WhatsApp ke ${cleanPhone}...`) : undefined;
 
-      fetch(fetchUrl, {
-        method: 'POST',
-        headers: reqHeaders,
-        body: reqBody
-      }).then(res => res.json())
-        .then(res => {
-           const isSuccess = res.status === true || res.detail === "success" || res.message === "success" || res.message?.toLowerCase().includes("success");
-           if(isSuccess) {
-             console.log("WA Gateway terkirim ke", user.name);
-             if (toastWaId) toast.success(`WhatsApp terkirim ke ${user.name}! 📱`, { id: toastWaId });
-           } else {
-             console.error("WA Gateway Gagal:", res);
-             const errMsg = `WhatsApp Gagal: ${res.reason || res.message || 'Perangkat WA Gateway tidak terhubung'} ❌`;
-             if (toastWaId) {
-               toast.error(errMsg, { id: toastWaId });
-             } else {
-               toast.error(errMsg, { duration: 6000 });
-             }
-           }
-        })
-        .catch(err => {
-          console.error("WA Gateway API Error:", err);
-          const errMsg = `WhatsApp Error: ${err.message || 'Koneksi ke API Gateway gagal'} ❌`;
-          if (toastWaId) {
-            toast.error(errMsg, { id: toastWaId });
+      callSendWhatsApp({ tenantId, phone: cleanPhone, message: waMessage })
+        .then((res) => {
+          if (res.success) {
+            console.log("WA Proxy: Terkirim via", res.provider);
+            if (toastWaId) toast.success(`WhatsApp terkirim ke ${user.name}! 📱`, { id: toastWaId });
           } else {
-            toast.error(errMsg, { duration: 6000 });
+            console.error("WA Proxy Gagal:", res.message);
+            if (toastWaId) toast.error(`WhatsApp Gagal: ${res.message} ❌`, { id: toastWaId });
+            else toast.error(`WhatsApp Gagal: ${res.message} ❌`, { duration: 6000 });
           }
+        })
+        .catch((err) => {
+          console.error("WA Proxy Error:", err);
+          const errMsg = `WhatsApp Error: ${err?.message || 'Koneksi ke proxy gagal'} ❌`;
+          if (toastWaId) toast.error(errMsg, { id: toastWaId });
+          else toast.error(errMsg, { duration: 6000 });
         });
     } else if (eventType !== 'OTP_CODE') {
       let reasons: string[] = [];
-      if (!waToken) reasons.push("API Key WA Gateway belum diisi");
+      if (!tenantId) reasons.push("Tenant ID tidak ditemukan di sesi");
       if (!user.phone) reasons.push("No. WhatsApp Anda belum diisi di profil");
       toast.error(`WhatsApp tidak dikirim: ${reasons.join(" & ")} ⚠️`, { id: `wa_skip_${eventType}` });
     }
 
     // 3. Kirim Email via Google Apps Script (GAS) Web App
-    if (school.gasWebAppUrl && user.email) {
+    if (gasEmailUrl && user.email) {
       const toastEmailId = eventType !== 'OTP_CODE' ? toast.loading(`Mengirim Email ke ${user.email}...`) : undefined;
-      fetch(school.gasWebAppUrl, {
+      fetch(gasEmailUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8' 
@@ -463,13 +436,13 @@ ${emailFooter}
       });
     } else if (eventType !== 'OTP_CODE') {
       let reasons: string[] = [];
-      if (!school.gasWebAppUrl) reasons.push("URL Web App Google belum diisi");
+      if (!gasEmailUrl) reasons.push("URL Web App Google belum diisi");
       if (!user.email) reasons.push("Alamat Email Anda belum diisi di profil");
       toast.error(`Email tidak dikirim: ${reasons.join(" & ")} ⚠️`, { id: `email_skip_${eventType}` });
     }
 
     // Fallback UI Notification
-    if (!school.whatsappApiKey && !school.gasWebAppUrl && eventType !== 'OTP_CODE') {
+    if (!gasEmailUrl && eventType !== 'OTP_CODE') {
        toast("🔔 API Notifikasi belum diatur. Pesan disimpan di Log.", { id: `notif_sim_${eventType}` });
     }
 

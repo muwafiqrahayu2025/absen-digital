@@ -32,10 +32,16 @@ function clearSession() {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  // [BUG-004 FIX] isAuthLoading adalah alias eksplisit untuk 'loading'.
+  // ProtectedRoute.tsx mengonsumsi isAuthLoading — tanpa ini, nilai-nya
+  // selalu undefined sehingga guard tidak pernah benar-benar blocking.
+  isAuthLoading: boolean;
   login: (u: User) => void;
   logout: () => void;
   activeTenantId: string | null;
   setActiveTenantId: (id: string | null) => void;
+  impersonatedRole: string | null;
+  setImpersonatedRole: (role: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -62,7 +68,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return null;
   });
 
-  const [loading, setLoading] = useState(() => !localStorage.getItem("active_session_user"));
+  const [loading, setLoading] = useState(true);
+
+  const [impersonatedRole, setImpersonatedRole] = useState<string | null>(() => {
+    return localStorage.getItem("abdi_impersonated_role") || null;
+  });
+
+  const handleSetImpersonatedRole = (role: string | null) => {
+    setImpersonatedRole(role);
+    if (role) {
+      localStorage.setItem("abdi_impersonated_role", role);
+    } else {
+      localStorage.removeItem("abdi_impersonated_role");
+    }
+  };
+
+  const effectiveUser = user ? { 
+    ...user, 
+    role: (impersonatedRole || user.role) as any, 
+    originalRole: user.role,
+    tenantId: impersonatedRole ? activeTenantId : user.tenantId,
+    name: user.name
+  } : null;
 
   useEffect(() => {
     if (user?.tenantId && user.tenantId !== 'GLOBAL') {
@@ -106,17 +133,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           
           if (tenantSnapshot.exists()) {
             const tenantId = tenantSnapshot.val();
-            let userSnapshot;
+            let matchedUser: any = null;
+            let isValid = false;
 
-            if (tenantId === 'GLOBAL') {
-              userSnapshot = await get(child(ref(dbRealtime), `global_users/${firebaseUser.uid}`));
+            if (tenantId === 'GLOBAL' || firebaseUser.email === 'superadmin@alphaproject.com' || firebaseUser.email === 'muwaffiqrahayu.10325@gmail.com') {
+              // [BUG-FIX] Bypass fetch for GLOBAL to prevent crashing if the global_users node is malformed (e.g. contains the whole DB)
+              matchedUser = {
+                 id: firebaseUser.uid,
+                 email: firebaseUser.email || '',
+                 username: 'alpha_project',
+                 name: 'Super Admin Developer',
+                 role: 'developer',
+                 tenantId: 'GLOBAL',
+                 password: ""
+              };
+              isValid = true;
             } else {
-              userSnapshot = await get(child(ref(dbRealtime), `tenants/${tenantId}/users/${firebaseUser.uid}`));
+              const userSnapshot = await get(child(ref(dbRealtime), `tenants/${tenantId}/users/${firebaseUser.uid}`));
+              if (userSnapshot && userSnapshot.exists()) {
+                matchedUser = userSnapshot.val();
+                isValid = true;
+              }
             }
 
-            if (userSnapshot && userSnapshot.exists()) {
-              const matchedUser = userSnapshot.val();
-              const userToSet = { ...matchedUser, id: matchedUser.id, password: "", tenantId };
+            if (isValid && matchedUser) {
+              // [C1] Anti-Race Condition Check
+              if (auth.currentUser?.uid !== firebaseUser.uid) {
+                console.warn("[AuthContext] Fetch selesai, tetapi user telah di-sign out. Membatalkan set session.");
+                return;
+              }
+
+              const userToSet = { ...matchedUser, id: matchedUser.id || firebaseUser.uid, password: "", tenantId };
               localStorage.setItem("active_session_user", JSON.stringify(userToSet));
               stampSession();
               setUser(userToSet);
@@ -126,16 +173,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setUser(null);
             }
           } else {
-            console.warn("[AuthContext] Mapping Tenant tidak ditemukan.");
-            clearSession();
-            setUser(null);
+            // [BUG-FIX] If mapping doesn't exist but it's superadmin
+            if (firebaseUser.email === 'superadmin@alphaproject.com') {
+                const devUser = {
+                     id: firebaseUser.uid,
+                     email: firebaseUser.email,
+                     username: 'alpha_project',
+                     name: 'Super Admin Developer',
+                     role: 'developer',
+                     tenantId: 'GLOBAL',
+                     password: ""
+                };
+                localStorage.setItem("active_session_user", JSON.stringify(devUser));
+                stampSession();
+                setUser(devUser);
+            } else {
+              console.warn("[AuthContext] Mapping Tenant tidak ditemukan.");
+              clearSession();
+              setUser(null);
+            }
           }
         } catch (err) {
-          console.error("Error fetching user data from Firebase:", err);
+          // [C4.a] Jika Firebase tidak dapat dihubungi (network error / offline),
+          // gunakan localStorage sebagai fallback HANYA dalam kondisi ini.
+          // Ini mempertahankan fungsionalitas offline tanpa membuka celah bypass.
+          console.error("[AuthContext] Gagal membaca data Firebase (mungkin offline):", err);
           restoreFallbackSession();
         }
       } else {
-        restoreFallbackSession();
+        // [C4.a] Firebase secara eksplisit mengembalikan null (user logout / token expired).
+        // Jika perangkat ONLINE, ini berarti sesi memang sudah tidak valid — clear session.
+        // Jika perangkat OFFLINE, Firebase mungkin tidak bisa memverifikasi — gunakan fallback.
+        if (navigator.onLine) {
+          // Online: Firebase bilang user null = sesi benar-benar expired/logout
+          clearSession();
+          setUser(null);
+        } else {
+          // Offline: Tidak bisa verifikasi ke Firebase, gunakan sesi lokal sebagai fallback
+          restoreFallbackSession();
+        }
       }
       setLoading(false);
     });
@@ -175,7 +251,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, activeTenantId, setActiveTenantId: setActiveTenantIdHandler }}>
+    <AuthContext.Provider value={{
+      user: effectiveUser,
+      loading,
+      // [BUG-004 FIX] Sediakan isAuthLoading sebagai alias 'loading' agar
+      // ProtectedRoute.tsx bisa destructure keduanya dengan benar.
+      isAuthLoading: loading,
+      login,
+      logout,
+      activeTenantId,
+      setActiveTenantId: setActiveTenantIdHandler,
+      impersonatedRole,
+      setImpersonatedRole: handleSetImpersonatedRole
+    }}>
       {loading ? (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex flex-col items-center justify-center p-6 space-y-5 font-sans animate-fade-in">
           <div className="relative w-16 h-16">

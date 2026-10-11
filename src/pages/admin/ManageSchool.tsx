@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useLocation } from "react-router-dom";
 import { db } from "../../lib/db";
 import { School } from "../../types";
 import { MapPin, ShieldAlert, Navigation, Settings, Save, RefreshCw, X, Image as ImageIcon, Upload, Trash2, School as SchoolIcon, Send, Building, Printer, Eye, FileText, CheckCircle, Tv, Clock } from 'lucide-react';
@@ -9,22 +10,27 @@ import { NotificationService } from "../../lib/notifications";
 import { dbRealtime, getTenantRef } from "../../lib/firebase";
 import { ref, set, remove } from "firebase/database";
 import { useFirebaseData } from "../../hooks/useFirebaseData";
-import { PackageActivationCard } from "../../components/PackageActivationCard";
 import { idbStorage } from "../../lib/idbStorage";
 
 export function ManageSchool() {
   const { user } = useAuth();
   const { data: schoolData, isOffline, loading } = useFirebaseData('school');
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const tab = searchParams.get('tab') || 'profile';
 
-  const [school, setSchool] = useState<School>(() => db.getSchool());
+
+  const [school, setSchool] = useState<School>(() => ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 }));
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState<any>(() => db.getSchool());
+  const [formData, setFormData] = useState<any>(() => ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 }));
   const [confirmClean, setConfirmClean] = useState(false);
   const [confirmFactory, setConfirmFactory] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [isEditingKop, setIsEditingKop] = useState(false);
+  const [isSavingKop, setIsSavingKop] = useState(false);
   const [kopData, setKopData] = useState(() => {
-    const current = db.getSchool();
+    const current: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 });
     return current.kopSurat || {
       nama_dinas: current.nama_dinas || 'Nama Yayasan/Dinas Belum Diatur',
       nama_instansi: current.nama_instansi || current.name || 'SMA / SMP / KAMPUS UNGGULAN NUSANTARA',
@@ -101,28 +107,33 @@ export function ManageSchool() {
   const handleSaveKop = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
-    const currentSchool = school;
-    const updatedSchool: any = {
-      ...currentSchool,
-      name: kopData.nama_instansi || currentSchool.name,
-      address: kopData.alamat || currentSchool.address,
-      phone: kopData.telepon || currentSchool.phone,
-      adminEmail: kopData.email || currentSchool.adminEmail,
-      logoUrl: kopData.logo_url || currentSchool.logoUrl,
-      logo_url: kopData.logo_url,
-      nama_dinas: kopData.nama_dinas,
-      nama_instansi: kopData.nama_instansi,
-      telepon: kopData.telepon,
-      email: kopData.email,
-      website: kopData.website,
-      kode_pos: kopData.kode_pos,
-      kopSurat: {
-        ...kopData
-      }
-    };
-    await set(getTenantRef('school'), updatedSchool);
-    setIsEditingKop(false);
-    toast.success("Data Kop Surat Resmi berhasil disimpan dan diterapkan pada cetak PDF/rekapitulasi!");
+    setIsSavingKop(true);
+    try {
+      const currentSchool = school;
+      const updatedSchool: any = {
+        ...currentSchool,
+        name: kopData.nama_instansi || currentSchool.name,
+        address: kopData.alamat || currentSchool.address,
+        phone: kopData.telepon || currentSchool.phone,
+        adminEmail: kopData.email || currentSchool.adminEmail,
+        logoUrl: kopData.logo_url || currentSchool.logoUrl,
+        logo_url: kopData.logo_url,
+        nama_dinas: kopData.nama_dinas,
+        nama_instansi: kopData.nama_instansi,
+        telepon: kopData.telepon,
+        email: kopData.email,
+        website: kopData.website,
+        kode_pos: kopData.kode_pos,
+        kopSurat: {
+          ...kopData
+        }
+      };
+      await set(getTenantRef('school'), updatedSchool);
+      setIsEditingKop(false);
+      toast.success("Data Kop Surat Resmi berhasil disimpan dan diterapkan pada cetak PDF/rekapitulasi!");
+    } finally {
+      setIsSavingKop(false);
+    }
   };
 
   const [bgCustomData, setBgCustomData] = useState<string>(() => {
@@ -181,7 +192,7 @@ export function ManageSchool() {
 
   const [kioskBgData, setKioskBgData] = useState<string>(() => {
     const saved = localStorage.getItem("qr_kiosk_bg_url");
-    const schoolData: any = db.getSchool();
+    const schoolData: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 });
     return saved || schoolData.kioskBgUrl || "";
   });
 
@@ -250,16 +261,20 @@ export function ManageSchool() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isOffline) { toast.error("Koneksi terputus. Tidak bisa menyimpan saat offline."); return; }
-    await set(getTenantRef('school'), formData);
-    setIsEditing(false);
-    toast.success(
-      "Konfigurasi instansi/sekolah/kampus berhasil disimpan!",
-    );
+    setIsSaving(true);
+    try {
+      await set(getTenantRef('school'), formData);
+      setIsEditing(false);
+      toast.success(
+        "Konfigurasi instansi/sekolah/kampus berhasil disimpan!",
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
-      <PackageActivationCard />
 
       {isOffline && (
         <div className="bg-amber-100 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-center gap-3">
@@ -279,6 +294,7 @@ export function ManageSchool() {
         <div className="flex justify-center p-8 text-slate-400 font-medium">Memuat data...</div>
       ) : (
       <>
+      {tab === 'profile' && (
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
         {/* Banner */}
         <div className="bg-gradient-to-r from-[#111c2d] to-[#1d74f2] p-6 text-white flex justify-between items-center">
@@ -561,9 +577,10 @@ export function ManageSchool() {
               <div className="flex gap-3 pt-4 justify-end">
                 <button
                   type="submit"
-                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
+                  disabled={isSaving}
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  <Save className="w-4 h-4" /> Simpan Konfigurasi
+                  <Save className="w-4 h-4" /> {isSaving ? "Menyimpan..." : "Simpan Konfigurasi"}
                 </button>
                 <button
                   type="button"
@@ -697,8 +714,10 @@ export function ManageSchool() {
           )}
         </div>
       </div>
+      )}
 
       {/* SECTION: PENGATURAN DATA KOP SURAT RESMI INSTANSI & LIVE PREVIEW */}
+      {tab === 'kop-surat' && (
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden text-left mt-6">
         <div className="bg-gradient-to-r from-[#1e293b] to-[#334155] p-6 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
@@ -865,9 +884,10 @@ export function ManageSchool() {
               <div className="flex gap-3 pt-2 justify-end">
                 <button
                   type="submit"
-                  className="flex items-center justify-center gap-2 py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#10b981] to-[#059669] border border-[#34d399] shadow-[inset_0_2px_1px_rgba(255,255,255,0.4),_0_6px_15px_rgba(16,185,129,0.3)] hover:from-[#34d399] hover:to-[#10b981] transition-all duration-200"
+                  disabled={isSavingKop}
+                  className="flex items-center justify-center gap-2 py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#10b981] to-[#059669] border border-[#34d399] shadow-[inset_0_2px_1px_rgba(255,255,255,0.4),_0_6px_15px_rgba(16,185,129,0.3)] hover:from-[#34d399] hover:to-[#10b981] transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  <Save className="w-4 h-4" /> Simpan Data Kop Surat
+                  <Save className="w-4 h-4" /> {isSavingKop ? "Menyimpan..." : "Simpan Data Kop Surat"}
                 </button>
                 <button
                   type="button"
@@ -938,8 +958,10 @@ export function ManageSchool() {
           </div>
         </div>
       </div>
+      )}
 
       {/* SECTION: LOGIN BACKGROUND CUSTOMIZER */}
+      {tab === 'login-bg' && (
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden text-left mt-6">
         <div className="bg-purple-50/50 p-6 border-b border-slate-100 flex items-center gap-3">
           <ImageIcon className="text-[#7928CA] shrink-0" size={24} />
@@ -1005,8 +1027,10 @@ export function ManageSchool() {
           </div>
         </div>
       </div>
+      )}
 
       {/* SECTION: LIVE TV / KIOSK BACKGROUND */}
+      {tab === 'kiosk-bg' && (
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden text-left mt-6">
         <div className="bg-indigo-50/50 p-6 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -1078,8 +1102,10 @@ export function ManageSchool() {
           </div>
         </div>
       </div>
+      )}
 
       {/* SECTION: SYSTEM LOGS & EMAIL HISTORY */}
+      {tab === 'log-transmisi' && (
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden text-left mt-6">
         <div className="bg-indigo-50/30 p-6 border-b border-slate-100 flex items-center gap-3">
           <Settings className="text-indigo-650 shrink-0" size={24} />
@@ -1139,8 +1165,10 @@ export function ManageSchool() {
           </div>
         </div>
       </div>
+      )}
 
       {/* SECTION: DATABASE & TRANSACTION UTILITIES */}
+      {tab === 'db-utils' && (
       <div className="bg-red-50/50 rounded-3xl border border-red-100 overflow-hidden text-left mt-6">
         <div className="p-6 border-b border-red-100 flex items-start gap-4">
           <ShieldAlert className="text-red-500 shrink-0 mt-1" size={24} />
@@ -1238,6 +1266,7 @@ export function ManageSchool() {
           </div>
         </div>
       </div>
+      )}
       </>
       )}
     </div>

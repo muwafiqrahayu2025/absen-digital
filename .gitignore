@@ -9,3 +9,25 @@ coverage/
 
 # Local Netlify folder
 .netlify
+
+# ─── BACKEND SECRETS — JANGAN PERNAH DI-COMMIT ────────────────
+# Firebase Admin SDK Service Account (credentials sangat sensitif)
+backend/api/serviceAccountKey.json
+**/serviceAccountKey.json
+# Backend environment variables (berisi ENCRYPTION_SECRET)
+backend/.env
+backend/api/.env
+
+# ─── OUTPUT & DEBUG FILES — ARCH-001 ──────────────────────────
+# File-file sementara hasil debugging, dump, dan patch
+output.txt
+output_utf8.txt
+*.diff
+*.patch
+scripts/*.log
+
+# ─── OS & EDITOR ───────────────────────────────────────────────
+Thumbs.db
+*.swp
+*.swo
+.vscode/settings.json

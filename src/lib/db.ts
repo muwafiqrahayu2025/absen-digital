@@ -20,6 +20,16 @@ if (localStorage.getItem(DB_VERSION_KEY) !== CURRENT_DB_VERSION) {
   });
 }
 
+// In-memory cache for attendance to allow synchronous reads without localStorage limit
+let memoryAttendance: AttendanceRecord[] = [];
+// Initialize from IndexedDB
+idbStorage.getItem('attendance_logs', 'attendance').then(data => {
+  if (data && Array.isArray(data)) {
+    memoryAttendance = data.filter((item: any) => item !== null && item !== undefined && typeof item === 'object');
+    window.dispatchEvent(new Event('attendance_synchronized'));
+  }
+});
+
 function parseArrayStorage<T = any>(key: string, initialData: T[] = []): T[] {
   try {
     const stored = localStorage.getItem(key);
@@ -35,50 +45,62 @@ function parseArrayStorage<T = any>(key: string, initialData: T[] = []): T[] {
 }
 
 export const db = {
-  // STUBBED MASTER DATA FUNCTIONS
-  // These have been deprecated in favor of useFirebaseData (Full Online Migration)
-  // They return empty structures to satisfy TypeScript during refactoring.
-  getUsers: (includeSystemAccounts: boolean = false): any[] => { console.warn('db.getUsers is deprecated. Use useFirebaseData.'); return []; },
-  setUsers: (users: any[]) => { console.warn('db.setUsers is deprecated.'); },
-  updateUserPassword: () => false,
-  updateUser: () => false,
-  getSchool: (): any => { console.warn('db.getSchool is deprecated.'); return {}; },
-  setSchool: () => {},
-  updateSchool: () => ({}),
-  getOPDs: (): any[] => [],
-  setOPDs: () => {},
-  getSatuanKerjas: (): any[] => [],
-  setSatuanKerjas: () => {},
-  getJabatans: (): any[] => [],
-  setJabatans: () => {},
-  getCutiRequests: (): any[] => [],
-  setCutiRequests: () => {},
-  getKinerjas: (): any[] => [],
-  setKinerjas: () => {},
-  getAcademicYears: (): any[] => [],
-  setAcademicYears: () => {},
-  getHolidays: (): any[] => [],
-  setHolidays: () => {},
-  getSchedules: (): any[] => [],
-  saveSchedule: () => {},
-  deleteSchedule: () => {},
+  // ─────────────────────────────────────────────────────────────
+  // COMPATIBILITY LAYER (MIGRATION IN PROGRESS)
+  // Master data kini dikelola secara reaktif via useFirebaseData(),
+  // namun method ini dipertahankan agar komponen-komponen yang masih
+  // memanggil db.getUsers(), db.getSchool(), db.getSchedules(), dll.
+  // tetap berjalan stabil tanpa runtime error / crash.
+  // ─────────────────────────────────────────────────────────────
+  getUsers: (_includeSystemAccounts: boolean = false): any[] => parseArrayStorage<any>('users', []),
+  setUsers: (users?: any[]) => { if (users) localStorage.setItem('users', JSON.stringify(users)); },
+  updateUserPassword: (_id?: string, _newPassword?: string) => false,
+  updateUser: (_id?: string, _data?: any) => false,
+  getSchool: (): any => {
+    try {
+      const s = localStorage.getItem('school');
+      return s ? JSON.parse(s) : {};
+    } catch { return {}; }
+  },
+  setSchool: (school?: any) => { if (school) localStorage.setItem('school', JSON.stringify(school)); },
+  updateSchool: (_school?: any) => ({}),
+  getOPDs: (): any[] => parseArrayStorage<any>('opds', []),
+  setOPDs: (_opds?: any[]) => {},
+  getSatuanKerjas: (): any[] => parseArrayStorage<any>('satuan_kerjas', []),
+  setSatuanKerjas: (_satuanKerjas?: any[]) => {},
+  getJabatans: (): any[] => parseArrayStorage<any>('jabatans', []),
+  setJabatans: (_jabatans?: any[]) => {},
+  getCutiRequests: (): any[] => parseArrayStorage<any>('cuti_requests', []),
+  setCutiRequests: (_cutis?: any[]) => {},
+  getKinerjas: (): any[] => parseArrayStorage<any>('kinerjas', []),
+  setKinerjas: (_kinerjas?: any[]) => {},
+  getAcademicYears: (): any[] => parseArrayStorage<any>('academic_years', []),
+  setAcademicYears: (_years?: any[]) => {},
+  getHolidays: (): any[] => parseArrayStorage<any>('holidays', []),
+  setHolidays: (_holidays?: any[]) => {},
+  getSchedules: (): any[] => parseArrayStorage<any>('schedules', []),
+  setSchedules: (schedules?: any[]) => { if (schedules) localStorage.setItem('schedules', JSON.stringify(schedules)); },
+  deleteSchedule: (_id?: string) => {},
+  getSettings: (): any => ({}),
+  setSettings: (_settings?: any) => {},
+  updateSettings: (_settings?: any) => ({}),
+  getGlobalSettings: (): any => ({}),
+  getTenants: (): any[] => parseArrayStorage<any>('tenants', []),
+  setTenants: (_tenants?: any[]) => {},
 
   // ==========================================
   // OFFLINE ATTENDANCE & LOGS (KEPT INTACT)
   // ==========================================
-  getAttendance: (): AttendanceRecord[] => { return parseArrayStorage<AttendanceRecord>('attendance', []); },
+  getAttendance: (): AttendanceRecord[] => { return memoryAttendance; },
   setAttendance: (a: AttendanceRecord[]) => {
     const formatted = a.filter(rec => rec && typeof rec === 'object').map(rec => ({
       ...rec,
       is_synced: rec.isSynced !== undefined ? rec.isSynced : false,
       updated_at: (rec as any).updated_at || new Date().toISOString()
     }));
-    localStorage.setItem('attendance', JSON.stringify(formatted));
+    memoryAttendance = formatted as AttendanceRecord[];
+    // ONLY save to IndexedDB to avoid 5MB localStorage limit QuotaExceededError
     idbStorage.setItem('attendance_logs', 'attendance', formatted);
-    // Note: To sync to Firebase, you should now call enqueueOfflineSync from the component,
-    // or we can import pushToFirebase. For now, since we only want to write locally here
-    // and rely on offline queue for syncing, we don't automatically pushToFirebase here.
-    // Actually, LiveQRView/ScanQR handles the network push or enqueues it.
   },
 
   getSystemLogs: (): any[] => { return parseArrayStorage<any>('system_logs', []); },
@@ -158,7 +180,7 @@ export const syncOfflineAttendance = async (): Promise<number> => {
     }
     return a;
   });
-  localStorage.setItem('attendance', JSON.stringify(processing));
+  db.setAttendance(processing);
   window.dispatchEvent(new Event('attendance_synchronized'));
 
   const queueRes = await processOfflineQueue();

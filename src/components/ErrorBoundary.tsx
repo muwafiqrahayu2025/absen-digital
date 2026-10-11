@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
+import { useSystemLogStore } from '../hooks/useSystemLogStore';
 
 interface Props {
   children: ReactNode;
@@ -28,6 +29,12 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error in application component tree:', error, errorInfo);
+    useSystemLogStore.getState().addLog({
+      level: 'error',
+      message: error.message,
+      source: 'React ErrorBoundary',
+      stackTrace: errorInfo.componentStack || error.stack
+    });
   }
 
   private handleReload = () => {

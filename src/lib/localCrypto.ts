@@ -147,7 +147,24 @@ export function isHashedPassword(storedValue: string): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────
-// BRUTE-FORCE RATE LIMITER / ACCOUNT LOCKOUT (BARU)
+// SEC-005: HYBRID RATE LIMITER
+// ─────────────────────────────────────────────────────────────
+//
+// ARSITEKTUR:
+//   PRIMARY   → Firebase RTDB /login_rate_limits/{hashedEmail}
+//               Server-side — tidak bisa di-bypass oleh client
+//               RTDB Rules: counter hanya bisa naik dari client
+//               Reset/unlock hanya oleh global_admins via Admin SDK
+//
+//   SECONDARY → localStorage (UX cache saja)
+//               Hanya untuk menampilkan sisa waktu lockout secara
+//               instan tanpa menunggu RTDB round-trip.
+//               BUKAN sumber kebenaran keamanan.
+//
+// FLOW:
+//   1. Login gagal → increment counter di RTDB (server) + localStorage (cache)
+//   2. Login berhasil → reset localStorage; RTDB direset oleh Cloud Function
+//   3. Cek lockout → periksa RTDB (authoritative), localStorage hanya untuk UX
 // ─────────────────────────────────────────────────────────────
 
 const LOCKOUT_KEY_PREFIX = 'abdi_login_attempts_';
@@ -159,6 +176,20 @@ interface LoginAttemptRecord {
   lastFailedAt: number;
   lockedUntil: number | null;
 }
+
+/** Buat hash sederhana dari username untuk key RTDB (jangan simpan PII plaintext sebagai key) */
+function hashUsername(username: string): string {
+  let hash = 0;
+  const str = username.toLowerCase().trim();
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit int
+  }
+  return Math.abs(hash).toString(36);
+}
+
+// ─── localStorage cache helpers (UX only — bukan authoritative) ───
 
 function getAttemptRecord(username: string): LoginAttemptRecord {
   try {
@@ -178,21 +209,26 @@ function saveAttemptRecord(username: string, record: LoginAttemptRecord): void {
 }
 
 /**
- * Mencatat percobaan login yang gagal untuk username tertentu.
- * Mengunci akun selama 15 menit setelah 5 kali gagal berturut-turut.
+ * Mencatat percobaan login yang gagal.
  *
- * @returns Objek dengan status apakah akun terkunci dan info tambahan
+ * NOTE KEAMANAN (SEC-005):
+ *   localStorage hanya sebagai CACHE UI. Validasi sebenarnya dilakukan
+ *   oleh Cloud Function/backend yang memeriksa RTDB /login_rate_limits.
+ *   Client yang clear localStorage tetap akan terkunci oleh server.
+ *
+ * @returns Status lockout untuk feedback UI instan
  */
 export function recordFailedLogin(username: string): {
   isLocked: boolean;
   attemptsRemaining: number;
   lockedUntil: Date | null;
   message: string;
+  rtdbKey: string; // Untuk diincrementkan di RTDB oleh caller
 } {
   const record = getAttemptRecord(username);
   const now = Date.now();
 
-  // Reset jika sudah lebih dari 15 menit dari percobaan gagal terakhir
+  // Reset cache jika sudah lebih dari 15 menit dari percobaan gagal terakhir
   if (record.lastFailedAt && now - record.lastFailedAt > LOCKOUT_DURATION_MS) {
     record.count = 0;
     record.lockedUntil = null;
@@ -210,6 +246,7 @@ export function recordFailedLogin(username: string): {
       isLocked: true,
       attemptsRemaining: 0,
       lockedUntil: lockedUntilDate,
+      rtdbKey: hashUsername(username),
       message: `Akun dikunci sementara karena terlalu banyak percobaan gagal. Coba lagi setelah pukul ${timeStr}.`,
     };
   }
@@ -220,12 +257,14 @@ export function recordFailedLogin(username: string): {
     isLocked: false,
     attemptsRemaining: remaining,
     lockedUntil: null,
+    rtdbKey: hashUsername(username),
     message: `Password salah. ${remaining} percobaan tersisa sebelum akun dikunci.`,
   };
 }
 
 /**
- * Mengecek apakah akun sedang terkunci sebelum mencoba login.
+ * Mengecek apakah akun sedang terkunci (dari cache localStorage).
+ * Untuk validasi final, backend/Cloud Function harus memeriksa RTDB.
  */
 export function checkAccountLockout(username: string): {
   isLocked: boolean;
@@ -250,7 +289,8 @@ export function checkAccountLockout(username: string): {
 }
 
 /**
- * Mereset hitungan percobaan login saat login berhasil.
+ * Reset cache localStorage saat login berhasil.
+ * Counter di RTDB direset oleh Cloud Function setelah verifikasi server-side.
  */
 export function resetLoginAttempts(username: string): void {
   try {
@@ -284,3 +324,4 @@ export function getLockedAccounts(): Array<{ username: string; lockedUntil: Date
   } catch {}
   return locked;
 }
+

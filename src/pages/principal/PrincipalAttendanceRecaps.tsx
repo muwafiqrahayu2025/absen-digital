@@ -17,8 +17,9 @@ import toast from "react-hot-toast";
 export function PrincipalAttendanceRecaps() {
   const [jenisRekap, setJenisRekap] = useState("");
   const [bulan, setBulan] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
   const activeAcademicYear = db.getAcademicYears().find((ay) => ay && ay.isActive);
-  const school = db.getSchool();
+  const school: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
 
   // Generate last 6 months for options
   const monthOptions = [
@@ -54,10 +55,14 @@ export function PrincipalAttendanceRecaps() {
       return;
     }
 
-    import("jspdf").then(({ jsPDF }) => {
-      import("jspdf-autotable").then(({ default: autoTable }) => {
+    setIsExporting(true);
+    toast.loading("Mempersiapkan dokumen PDF...", { id: "export-pdf" });
+
+    setTimeout(() => {
+      import("jspdf").then(({ jsPDF }) => {
+        import("jspdf-autotable").then(({ default: autoTable }) => {
         const doc = new jsPDF("landscape");
-        const school = db.getSchool();
+        const school: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
         const kop = school?.kopSurat || {};
         const logoBase64 = kop.logo_url || school?.logo_url || school?.logoUrl;
 
@@ -207,9 +212,14 @@ export function PrincipalAttendanceRecaps() {
         if (jenisRekap === "perbulan") filename += `_${bulan}`;
 
         doc.save(`${filename}.pdf`);
-        toast.success("Laporan PDF berhasil diunduh!");
+        toast.success("Laporan PDF berhasil diunduh!", { id: "export-pdf" });
+        setIsExporting(false);
+      }).catch(err => {
+        toast.error("Gagal memuat pustaka PDF", { id: "export-pdf" });
+        setIsExporting(false);
       });
     });
+    }, 50);
   };
 
   const handleExportExcel = () => {
@@ -222,8 +232,12 @@ export function PrincipalAttendanceRecaps() {
       return;
     }
 
-    const users = db.getUsers();
-    const allAttendance = db.getAttendance();
+    setIsExporting(true);
+    toast.loading("Mengekstrak data ke Excel...", { id: "export-excel" });
+
+    setTimeout(() => {
+      const users = db.getUsers();
+      const allAttendance = db.getAttendance();
 
     const rowData: any[] = [];
     users.forEach((usr, index) => {
@@ -273,7 +287,9 @@ export function PrincipalAttendanceRecaps() {
     if (jenisRekap === "perbulan") filename += `_${bulan}`;
 
     saveAs(blob, `${filename}.xlsx`);
-    toast.success("Berkas Excel (XLSX) berhasil diunduh!");
+    toast.success("Berkas Excel (XLSX) berhasil diunduh!", { id: "export-excel" });
+    setIsExporting(false);
+    }, 50);
   };
 
   return (
@@ -352,23 +368,28 @@ export function PrincipalAttendanceRecaps() {
         <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-slate-100">
           <button
             onClick={handleDownload}
-            className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
+            disabled={isExporting}
+            className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Printer size={14} className="text-cyan-600" /> Cetak Slip Rekapitulasi (Print)
           </button>
 
           <button
             onClick={handleExportPDF}
-            className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
+            disabled={isExporting}
+            className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <FileText size={14} className="text-red-500" /> Unduh Laporan PDF
+            {isExporting ? <span className="animate-spin text-white">⟳</span> : <FileText size={14} className="text-red-500" />} 
+            {isExporting ? 'Memproses PDF...' : 'Unduh Laporan PDF'}
           </button>
 
           <button
             onClick={handleExportExcel}
-            className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200"
+            disabled={isExporting}
+            className="flex items-center justify-center gap-2 w-full sm:w-auto py-2.5 px-6 font-bold text-white text-sm rounded-2xl bg-gradient-to-b from-[#b829ff] to-[#7928CA] border border-[#d185ff] shadow-[inset_0_2px_1px_rgba(255,255,255,0.5),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_6px_15px_rgba(121,40,202,0.4)] hover:from-[#c24bff] hover:to-[#8630db] hover:shadow-[inset_0_2px_1px_rgba(255,255,255,0.6),_inset_0_-3px_2px_rgba(0,0,0,0.3),_0_8px_20px_rgba(121,40,202,0.5)] hover:-translate-y-[2px] active:from-[#7928CA] active:to-[#5e1e9d] active:shadow-[inset_0_4px_6px_rgba(0,0,0,0.3),_0_2px_4px_rgba(121,40,202,0.3)] active:translate-y-[2px] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <FileSpreadsheet size={14} className="text-emerald-600" /> Ekspor Dokumen Excel (XLSX)
+            {isExporting ? <span className="animate-spin text-white">⟳</span> : <FileSpreadsheet size={14} className="text-emerald-600" />} 
+            {isExporting ? 'Memproses Excel...' : 'Ekspor Dokumen Excel (XLSX)'}
           </button>
         </div>
       </div>

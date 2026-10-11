@@ -129,8 +129,11 @@ export function recordDeviceSessionLog(
     // 2. Sinkronisasi asinkron ke Firebase jika tersambung (tanpa melempar error jika offline)
     setTimeout(() => {
       try {
-        const logRef = push(getTenantRef("deviceSessionLogs"));
-        set(logRef, newLog).catch(() => {});
+        const tenantId = localStorage.getItem("abdi_active_tenant_id");
+        if (tenantId && tenantId !== 'GLOBAL') {
+          const logRef = push(getTenantRef("deviceSessionLogs"));
+          set(logRef, newLog).catch(() => {});
+        }
       } catch (err) {}
     }, 100);
   } catch (e) {

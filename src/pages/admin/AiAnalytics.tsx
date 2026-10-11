@@ -1,13 +1,29 @@
 import React, { useState, useRef, useEffect } from "react";
 import { AiExecutiveBriefing } from "../../components/AiExecutiveBriefing";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
-import { Award, Sparkles, TrendingUp, Users, CalendarCheck, ShieldAlert, BarChart3, ArrowUpRight, Send, Bot, User, MessageSquare } from "lucide-react";
+import { useGroqAnalyticsApiKey } from "../../hooks/useGroqAnalyticsApiKey";
+import Groq from "groq-sdk";
+import { useFirebaseQuery } from "../../hooks/useFirebaseQuery";
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+} from 'recharts';
 import { db } from "../../lib/db";
+import { 
+  Sparkles, Award, CalendarCheck, TrendingUp, ShieldAlert, 
+  BarChart3, MessageSquare, Bot, User, Send 
+} from 'lucide-react';
 
 export function AiAnalytics() {
   useDocumentTitle("AI Analytics & Executive Briefing");
-  const school = db.getSchool();
-  const attendance = db.getAttendance();
+  const school: any = ({ name: (JSON.parse(localStorage.getItem("active_session_user") || "{}")).satuanKerja || (JSON.parse(localStorage.getItem("active_session_user") || "{}")).opd || "Instansi", radius: 120, address: "", kopSurat: null, latitude: 0, longitude: 0 } as any);
+  
+  // Ambil data attendance 30 hari terakhir saja
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const startStr = thirtyDaysAgo.toISOString().split("T")[0];
+  const { data: rawAttendance } = useFirebaseQuery<any[]>('attendance', { orderByChild: 'date', startAt: startStr }, []);
+  const attendance = React.useMemo(() => rawAttendance || [], [rawAttendance]);
+  
   const users = db.getUsers();
 
   // Hitung ringkasan cepat untuk header kartu
@@ -19,6 +35,34 @@ export function AiAnalytics() {
   const totalPegawai = users.filter((u) => u.role !== "admin" && u.role !== "developer").length;
   const persentaseKehadiran = totalPegawai > 0 ? Math.round((totalHadir / totalPegawai) * 100) : 0;
 
+  // Agregasi Data untuk Grafik (useMemo agar tidak re-render O(N) terus menerus)
+  const chartData = React.useMemo(() => {
+    const map = new Map<string, { date: string; hadir: number; terlambat: number; izin: number; alpha: number }>();
+    
+    // Inisialisasi 30 hari kosong agar sumbu X tidak terputus
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const ds = d.toISOString().split("T")[0];
+      map.set(ds, { date: ds, hadir: 0, terlambat: 0, izin: 0, alpha: 0 });
+    }
+    
+    attendance.forEach((a: any) => {
+      if (map.has(a.date)) {
+        const entry = map.get(a.date)!;
+        if (a.status === 'Hadir') entry.hadir++;
+        else if (a.status === 'Terlambat') entry.terlambat++;
+        else if (a.status === 'Alpha') entry.alpha++;
+        else entry.izin++; 
+      }
+    });
+    
+    return Array.from(map.values()).map(d => ({
+      ...d,
+      dateFormatted: d.date.substring(8, 10) + '/' + d.date.substring(5, 7) // Format DD/MM
+    }));
+  }, [attendance]);
+
   // Chat state
   const [messages, setMessages] = useState<{role: 'user'|'ai', text: string}[]>([]);
   const [input, setInput] = useState("");
@@ -29,6 +73,8 @@ export function AiAnalytics() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
+  const groqApiKey = useGroqAnalyticsApiKey();
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isTyping) return;
@@ -38,49 +84,39 @@ export function AiAnalytics() {
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
     setIsTyping(true);
 
-    const storedKey = localStorage.getItem('abdi_gemini_api_key');
-    
-    if (storedKey && storedKey.trim().length > 10) {
-      try {
-        const promptContext = `Sebagai AI Assistant untuk data kehadiran ${school.name}, jawab pertanyaan berikut: "${userText}". Data saat ini: ${totalHadir} hadir, ${totalAlpha} alpha dari total ${totalPegawai} pegawai. Jawablah dengan bahasa Indonesia yang profesional, ringkas, dan solutif.`;
-        
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${storedKey.trim()}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: promptContext }] }],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
-          })
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (aiText) {
-            setMessages(prev => [...prev, { role: 'ai', text: aiText }]);
-            setIsTyping(false);
-            return;
-          }
-        }
-      } catch (error) {
-        console.error("Gemini API Error in Chat:", error);
+    try {
+      if (!groqApiKey) {
+        throw new Error("No API Key");
       }
-    }
+      
+      const promptText = `Berdasarkan data kehadiran berikut, jawablah pertanyaan dengan ringkas dan profesional:
+Total Pegawai: ${totalPegawai}
+Kehadiran Hari Ini: ${totalHadir}
+Tingkat Kehadiran: ${persentaseKehadiran}%
+Alpha: ${totalAlpha}
+Izin/Sakit/Cuti: ${totalIzin}
 
-    // Fallback SMART LOCAL ENGINE
-    setTimeout(() => {
-      let localResponse = "Berdasarkan SMART LOCAL ENGINE: Saya berjalan pada mode luring saat ini. ";
-      const lowerInput = userText.toLowerCase();
-      if (lowerInput.includes("hadir") || lowerInput.includes("kedisiplinan")) {
-        localResponse += `Hari ini terdapat ${totalHadir} personel yang telah hadir dari total ${totalPegawai} orang (Tingkat kehadiran: ${persentaseKehadiran}%).`;
-      } else if (lowerInput.includes("alpha") || lowerInput.includes("tanpa keterangan")) {
-        localResponse += `Terdapat ${totalAlpha} personel yang belum memberikan keterangan (Alpha) hari ini.`;
+Pertanyaan: ${userText}`;
+
+      const groq = new Groq({ apiKey: groqApiKey, dangerouslyAllowBrowser: true });
+      const chatCompletion = await groq.chat.completions.create({
+        messages: [{ role: "user", content: promptText }],
+        model: "llama-3.1-8b-instant",
+      });
+      const aiResponse = chatCompletion.choices[0]?.message?.content || "";
+      
+      setMessages(prev => [...prev, { role: 'ai', text: aiResponse }]);
+    } catch (error: any) {
+      console.error(error);
+      if (error.message === "No API Key") {
+        setMessages(prev => [...prev, { role: 'ai', text: "Konfigurasi API belum diatur oleh Admin." }]);
       } else {
-        localResponse += "Silakan hubungkan API Key GOOGLE GEMINI 1.5 FLASH untuk analisa kontekstual yang lebih komprehensif, atau tanyakan spesifik mengenai 'kehadiran' atau 'alpha'.";
+        const errorMessage = error?.message || "Terjadi kesalahan jaringan.";
+        setMessages(prev => [...prev, { role: 'ai', text: `Gagal merespons: ${errorMessage}` }]);
       }
-      setMessages(prev => [...prev, { role: 'ai', text: localResponse }]);
+    } finally {
       setIsTyping(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -146,6 +182,43 @@ export function AiAnalytics() {
           <div>
             <span className="text-xs font-bold text-slate-400 block uppercase">Total Staf Aktif</span>
             <span className="text-lg font-black text-slate-800">{totalPegawai} <span className="text-xs font-medium text-slate-500">Terdaftar</span></span>
+          </div>
+        </div>
+      </div>
+
+      {/* Tren Kehadiran 30 Hari Terakhir (Recharts) */}
+      <div className="max-w-6xl mx-auto pt-6">
+        <div className="bg-white rounded-[1.8rem] border border-slate-200 shadow-sm p-6">
+          <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+            <TrendingUp size={20} className="text-indigo-600" /> Tren Kehadiran & Keterlambatan (30 Hari)
+          </h2>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorHadir" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorTerlambat" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="dateFormatted" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                <Tooltip 
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  labelStyle={{ fontWeight: 'bold', color: '#1e293b', marginBottom: '4px' }}
+                />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
+                <Area type="monotone" name="Hadir" dataKey="hadir" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorHadir)" />
+                <Area type="monotone" name="Terlambat" dataKey="terlambat" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorTerlambat)" />
+                <Area type="monotone" name="Izin/Sakit" dataKey="izin" stroke="#3b82f6" strokeWidth={2} fillOpacity={0} />
+                <Area type="monotone" name="Alpha" dataKey="alpha" stroke="#ef4444" strokeWidth={2} fillOpacity={0} />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>
@@ -219,13 +292,13 @@ export function AiAnalytics() {
                 type="text" 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ketik pertanyaan Anda di sini..."
+                placeholder={!groqApiKey ? "Memuat API Key..." : "Ketik pertanyaan Anda di sini..."}
                 className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
-                disabled={isTyping}
+                disabled={isTyping || !groqApiKey}
               />
               <button 
                 type="submit" 
-                disabled={!input.trim() || isTyping}
+                disabled={!input.trim() || isTyping || !groqApiKey}
                 className="px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
               >
                 <Send size={18} />

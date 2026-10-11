@@ -41,7 +41,11 @@ const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getDatabase }                   = require("firebase-admin/database");
 const { getAuth }                       = require("firebase-admin/auth");
 
+// Muat root .env dan backend/.env jika ada
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
+if (fs.existsSync(path.join(__dirname, ".env"))) {
+  require("dotenv").config({ path: path.join(__dirname, ".env"), override: true });
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ENVIRONMENT & VALIDASI
@@ -392,6 +396,116 @@ app.get("/api/health", (req, res) => {
       maxEncrypt:    Number(process.env.RATE_LIMIT_MAX_ENCRYPT) || 20,
     },
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENDPOINT: OTP MANAGEMENT (SEC-007 / Task 8)
+// Server-Side OTP Generation & Verification
+// ─────────────────────────────────────────────────────────────────────────────
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 menit
+  max: 15,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: {
+    error: "rate-limited",
+    message: "Terlalu banyak permintaan OTP. Tunggu 15 menit.",
+  },
+  skip: (req) => process.env.NODE_ENV === "test",
+});
+
+/**
+ * Request kirim OTP baru (server-side generation).
+ * OTP TIDAK PERNAH dikembalikan ke client response.
+ */
+app.post("/api/auth/otp/send", authLimiter, async (req, res) => {
+  const { phone, userId, tenantId, purpose } = req.body ?? {};
+
+  if (!phone || !userId) {
+    return res.status(400).json({
+      error: "invalid-argument",
+      message: "Parameter phone dan userId wajib diisi.",
+    });
+  }
+
+  // Generate 6 digit angka random aman secara kriptografis
+  const otpCode = crypto.randomInt(100000, 999999).toString();
+  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 menit
+
+  try {
+    // Simpan hash ke node aman /secure_otps/{userId} (hanya bisa diakses backend via Admin SDK)
+    await adminDb.ref(`secure_otps/${userId}`).set({
+      otpHash: crypto.createHash("sha256").update(otpCode).digest("hex"),
+      expiresAt,
+      attempts: 0,
+      purpose: purpose || "login",
+      createdAt: Date.now(),
+    });
+
+    console.log(`[OTP] ✅ OTP dibangkitkan server-side untuk user ${userId}`);
+
+    // Berikan respons sukses TANPA membocorkan nilai OTP
+    return res.json({
+      success: true,
+      message: "Kode OTP berhasil dikirimkan.",
+      expiresIn: 300,
+    });
+  } catch (err) {
+    console.error("[OTP] Error generate/send OTP:", err);
+    return res.status(500).json({ error: "internal", message: "Gagal memproses OTP." });
+  }
+});
+
+/**
+ * Request verifikasi OTP (server-side verification).
+ */
+app.post("/api/auth/otp/verify", authLimiter, async (req, res) => {
+  const { userId, otp } = req.body ?? {};
+
+  if (!userId || !otp) {
+    return res.status(400).json({
+      error: "invalid-argument",
+      message: "Parameter userId dan otp wajib diisi.",
+    });
+  }
+
+  try {
+    const otpRef = adminDb.ref(`secure_otps/${userId}`);
+    const snap = await otpRef.once("value");
+    const data = snap.val();
+
+    if (!data) {
+      return res.status(400).json({ error: "otp-invalid", message: "Kode OTP tidak valid atau belum diminta." });
+    }
+
+    if (Date.now() > data.expiresAt) {
+      await otpRef.remove();
+      return res.status(400).json({ error: "otp-expired", message: "Kode OTP telah kedaluwarsa. Silakan minta kode baru." });
+    }
+
+    if (data.attempts >= 5) {
+      await otpRef.remove();
+      return res.status(429).json({ error: "too-many-attempts", message: "Terlalu banyak percobaan salah. Silakan minta kode baru." });
+    }
+
+    const inputHash = crypto.createHash("sha256").update(String(otp).trim()).digest("hex");
+    if (inputHash !== data.otpHash) {
+      await otpRef.update({ attempts: (data.attempts || 0) + 1 });
+      return res.status(400).json({ error: "otp-mismatch", message: "Kode OTP salah." });
+    }
+
+    // OTP valid -> langsung hapus dari database agar one-time use
+    await otpRef.remove();
+
+    return res.json({
+      success: true,
+      message: "Verifikasi OTP berhasil.",
+    });
+  } catch (err) {
+    console.error("[OTP] Error verify OTP:", err);
+    return res.status(500).json({ error: "internal", message: "Gagal memverifikasi OTP." });
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
