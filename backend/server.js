@@ -303,13 +303,13 @@ const attendanceLimiter = rateLimit({
   max: Number(process.env.RATE_LIMIT_MAX_ATTENDANCE) || 10,
   standardHeaders: "draft-7",
   legacyHeaders: false,
+  validate: false,
   message: {
     error: "rate-limited",
     message: `Terlalu banyak request presensi. Tunggu ${windowMs / 1000} detik.`,
   },
   keyGenerator: (req) => {
-    // Rate limit per token (userId) jika ada, fallback ke IP
-    return req.user?.uid ?? req.ip;
+    return req.user?.uid ?? (req.ip || "127.0.0.1");
   },
   skip: (req) => process.env.NODE_ENV === "test",
 });
@@ -323,6 +323,7 @@ const encryptLimiter = rateLimit({
   max: Number(process.env.RATE_LIMIT_MAX_ENCRYPT) || 20,
   standardHeaders: "draft-7",
   legacyHeaders: false,
+  validate: false,
   message: {
     error: "rate-limited",
     message: `Terlalu banyak request enkripsi. Tunggu ${windowMs / 1000} detik.`,
@@ -401,9 +402,17 @@ async function verifyTenantMembership(uid, tenantId) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ENDPOINT 1: HEALTH CHECK
-// GET /api/health
+// ENDPOINT: ROOT STATUS & HEALTH CHECK
 // ─────────────────────────────────────────────────────────────────────────────
+
+app.get("/", (req, res) => {
+  res.json({
+    service: "ABDI Backend API",
+    status: "online",
+    version: "3.0.0",
+    healthCheck: "/api/health",
+  });
+});
 
 app.get("/api/health", (req, res) => {
   const isEncryptionReady = Boolean(ENCRYPTION_SECRET && ENCRYPTION_SECRET.length >= 32);
@@ -444,6 +453,7 @@ const authLimiter = rateLimit({
   max: 15,
   standardHeaders: "draft-7",
   legacyHeaders: false,
+  validate: false,
   message: {
     error: "rate-limited",
     message: "Terlalu banyak permintaan OTP. Tunggu 15 menit.",
